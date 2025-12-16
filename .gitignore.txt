@@ -1,0 +1,24 @@
+# Arduino IDE files
+*.hex
+*.eep
+*.elf
+*.map
+*.sym
+*.lss
+*.lst
+build/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+*~
+
+# Credentials (if any config files contain sensitive data)
+config.h
+secrets.h
