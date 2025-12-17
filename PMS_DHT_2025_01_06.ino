@@ -57,7 +57,7 @@ GuL::PMS5003 pms(Serial2);
 // #define INFLUXDB_ORG "6ecfc9383074a24b"
 
 #define INFLUXDB_BUCKET "E_010"//Device ID CHange her e.g. JDH_IITJ # ACRL_014
-#define S1 "PMS_MACX_"//Device ID CHange here
+#define S1 "AU_PMS_CAPSTONE_"//Device ID CHange here
 
 // #define INFLUXDB_MEASUREMENT "atmosphere_data"
 
@@ -1048,7 +1048,7 @@ void checkFileExists() {
   date += Month;
   if (Day < 10) date += "0";
   date += Day;
-  filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(date) + ".csv";
+  filename = String(S1) + String(date) + ".csv";
   Serial.println(Day);
   Serial.println(Month);
   Serial.println(Year);
@@ -1104,7 +1104,7 @@ void logDataSdCard() {
   if (Day < 10) date += "0";
   date += Day;
  
-  filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(date)  + ".csv";
+  filename = String(S1) + String(date)  + ".csv";
   File file = SD.open("/" + filename, "a+");
   if (!file) {
     Serial.println ("Failed to open file for writing");
