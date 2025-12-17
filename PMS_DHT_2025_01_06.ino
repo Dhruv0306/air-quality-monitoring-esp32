@@ -3,10 +3,11 @@
 #include <HardwareSerial.h>
 #include <TinyGPS++.h>
 #include <Wire.h>
-#include <WiFi.h>
-#include <InfluxDbClient.h>
-#include <InfluxDbCloud.h>
-#include <WiFiManager.h>
+// Server Libraries
+// #include <WiFi.h>
+// #include <InfluxDbClient.h>
+// #include <InfluxDbCloud.h>
+// #include <WiFiManager.h>
 #include <Adafruit_BME680.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -15,8 +16,9 @@
 #include <SPI.h>
 //#include <string.h>
 #include <TimeLib.h>
-#include <HTTPClient.h>
-const char* test_url = "http://www.google.com";
+// Server Libraries
+// #include <HTTPClient.h>
+// const char* test_url = "http://www.google.com";
 String Date;
 #include <DS3231.h>
 #define BME_SCK 13
@@ -46,22 +48,25 @@ int utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond ;
 GuL::PMS5003 pms(Serial2);
 #define RX2 16
 #define TX2 17
-const char* WIFI_SSID = "Yap";
-const char* WIFI_PASSWORD = "letstest";
 
-#define INFLUXDB_URL "http://103.233.171.34:8086"
-#define INFLUXDB_TOKEN "A-XmUWeZyP_5w8xTxfd1rImg90GPBizsQiQR2qx0ZWgxG-YecEWAz08K3kApq43uu56DPeAumVuqMARv-7ZO6w=="
-#define INFLUXDB_ORG "6ecfc9383074a24b"
+// Server Related
+// const char* WIFI_SSID = "Yap";
+// const char* WIFI_PASSWORD = "letstest";
+// #define INFLUXDB_URL "http://103.233.171.34:8086"
+// #define INFLUXDB_TOKEN "A-XmUWeZyP_5w8xTxfd1rImg90GPBizsQiQR2qx0ZWgxG-YecEWAz08K3kApq43uu56DPeAumVuqMARv-7ZO6w=="
+// #define INFLUXDB_ORG "6ecfc9383074a24b"
+
 #define INFLUXDB_BUCKET "E_010"//Device ID CHange her e.g. JDH_IITJ # ACRL_014
 #define S1 "PMS_MACX_"//Device ID CHange here
-#define INFLUXDB_MEASUREMENT "atmosphere_data"
 
-#define WIFI_CONNECT_TIMEOUT 60000 // 1 minute
+// #define INFLUXDB_MEASUREMENT "atmosphere_data"
 
-#define TZ_INFO "IST-5:30"
+// #define WIFI_CONNECT_TIMEOUT 60000 // 1 minute
 
-InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN, InfluxDbCloud2CACert);
-Point sensor(INFLUXDB_MEASUREMENT);
+// #define TZ_INFO "IST-5:30"
+
+// InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN, InfluxDbCloud2CACert);
+// Point sensor(INFLUXDB_MEASUREMENT);
 
 TinyGPSPlus gps;
 HardwareSerial GPS(1);
@@ -91,12 +96,11 @@ RTClib rtc;
 bool wifiConnected = false; // Global variable to track WiFi connection status
 
 //ftpserver
-
-#include <FTPClient.h>
-#define FTP32_LOG FTP32_LOG_INFO
-#include "ftp32.h"
-const char* ftpuser = "SAS_Lab409";
-const char* ftpPass = "123";
+// #include <FTPClient.h>
+// #define FTP32_LOG FTP32_LOG_INFO
+// #include "ftp32.h"
+// const char* ftpuser = "SAS_Lab409";
+// const char* ftpPass = "123";
 
 int daysInMonth(int m, int y) { 
   if (m == 4 || m == 6 || m == 9 || m == 11) return 30; 
@@ -111,37 +115,38 @@ bool isLeapYear(int y) {
   return true; 
 }
 
-void readAndUploadCSVgps(String filename) {
-  File file = SD.open("/" +filename);
-  if (!file) {
-    Serial.println("Failed to open file!");
-    return;
-  }
-  int lineNum = 0;
-  while (file.available()) {
-    String line = file.readStringUntil('\n');
-    String remoteFilePath = "/line_" + String(lineNum) + ".txt"; // Change the remote file path as needed
-    FTP32 ftp("103.233.171.34", 8087);
-    //size_t dataSize = strlen(line);
-    Serial.println("File reading started");
-    if( ftp.connectWithPassword("SAS_Lab409", "Aqiguj@700") ){
+// Server Functions
+// void readAndUploadCSVgps(String filename) {
+//   File file = SD.open("/" +filename);
+//   if (!file) {
+//     Serial.println("Failed to open file!");
+//     return;
+//   }
+//   int lineNum = 0;
+//   while (file.available()) {
+//     String line = file.readStringUntil('\n');
+//     String remoteFilePath = "/line_" + String(lineNum) + ".txt"; // Change the remote file path as needed
+//     FTP32 ftp("103.233.171.34", 8087);
+//     //size_t dataSize = strlen(line);
+//     Serial.println("File reading started");
+//     if( ftp.connectWithPassword("SAS_Lab409", "Aqiguj@700") ){
 
-      Serial.println("Login unsuccessful");
-      Serial.printf("Exited with code: %d %s\n", ftp.getLastCode(), ftp.getLastMsg());
-      while(true){}
-    }
-    if (ftp.uploadSingleshot(filename.c_str(), (uint8_t*) line.c_str(), line.length() ,FTP32::OpenType::CREATE_REPLACE)) {
-      Serial.println("Upload failed");
-      Serial.printf("Exited with code: %d %s\n", ftp.getLastCode(), ftp.getLastMsg().c_str());
-      break;
-    } else {
-      Serial.printf("Uploaded line %d successfully: %s\n", lineNum, line.c_str());
-    }
-    lineNum++;
-  }
+//       Serial.println("Login unsuccessful");
+//       Serial.printf("Exited with code: %d %s\n", ftp.getLastCode(), ftp.getLastMsg());
+//       while(true){}
+//     }
+//     if (ftp.uploadSingleshot(filename.c_str(), (uint8_t*) line.c_str(), line.length() ,FTP32::OpenType::CREATE_REPLACE)) {
+//       Serial.println("Upload failed");
+//       Serial.printf("Exited with code: %d %s\n", ftp.getLastCode(), ftp.getLastMsg().c_str());
+//       break;
+//     } else {
+//       Serial.printf("Uploaded line %d successfully: %s\n", lineNum, line.c_str());
+//     }
+//     lineNum++;
+//   }
 
-  file.close();
-}
+//   file.close();
+// }
 
 
 int convertUtcToIstdate(int utcYear, int utcMonth, int utcDay, int utcHour, int utcMinute, int utcSecond) {
@@ -295,17 +300,20 @@ int convertUtcToIstday(int utcYear, int utcMonth, int utcDay, int utcHour, int u
     // Return the result in a composite integer format
     return  day;
 }
-void readMacAddress(){
-  uint8_t baseMac[6];
-  esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
-  if (ret == ESP_OK) {
-    Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
-                  baseMac[0], baseMac[1], baseMac[2],
-                  baseMac[3], baseMac[4], baseMac[5]);
-  } else {
-    Serial.println("Failed to read MAC address");
-  }
-}
+
+// Server Callbacks
+// void readMacAddress(){
+//   uint8_t baseMac[6];
+//   esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
+//   if (ret == ESP_OK) {
+//     Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
+//                   baseMac[0], baseMac[1], baseMac[2],
+//                   baseMac[3], baseMac[4], baseMac[5]);
+//   } else {
+//     Serial.println("Failed to read MAC address");
+//   }
+// }
+
 void setup() {
   Serial.begin(9600);
   Serial2.begin(9600);
@@ -316,7 +324,8 @@ void setup() {
   //pms7003.init(&Serial2);
   pms.setToPassiveReporting();
 
-  connectToWifi();
+  // Server Setup
+  // connectToWifi();
 
   if (!bme.begin()) {
     Serial.println("Could not find a valid BME680 sensor, check wiring!");
@@ -358,55 +367,56 @@ void setup() {
   }
 
   SD.begin(SD_CS);
-  readMacAddress();
+
+  // Server Setup
+  // readMacAddress();
   //checkFileExists();
-  saveConfigCallback();
+  // saveConfigCallback();
 
   //wifi setup for first time 
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("Already connected to WiFi!");
-    Serial.println("Wait 20s");
-    delay(20000);
-    return;
-  }
+  // if (WiFi.status() == WL_CONNECTED) {
+  //   Serial.println("Already connected to WiFi!");
+  //   Serial.println("Wait 20s");
+  //   delay(20000);
+  //   return;
+  // }
   
   // Attempt to connect using saved credentials for 20 seconds
-  unsigned long wifiStartTime = millis(); // Record the start time of WiFi connection attempt
-  while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < 20000) { // Try for 20 seconds
-    WiFi.begin(); // Attempt to reconnect using saved credentials
-    delay(500);
-  }
+  // unsigned long wifiStartTime = millis(); // Record the start time of WiFi connection attempt
+  // while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < 20000) { // Try for 20 seconds
+  //   WiFi.begin(); // Attempt to reconnect using saved credentials
+  //   delay(500);
+  // }
 
-  // If WiFi connection is established, display IP address and exit the function
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("Connected to WiFi!");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-    return;
-  }
+  // // If WiFi connection is established, display IP address and exit the function
+  // if (WiFi.status() == WL_CONNECTED) {
+  //   Serial.println("Connected to WiFi!");
+  //   Serial.print("IP Address: ");
+  //   Serial.println(WiFi.localIP());
+  //   return;
+  // }
 
-  // Start the WiFi configuration portal and run it for 1 minute
-  WiFiManager wifiManager;
-  wifiManager.setTimeout(60); // 60 seconds
-  wifiManager.setSaveParamsCallback([]() {
-    Serial.println("Save new WiFi credentials...");
-  });
+  // // Start the WiFi configuration portal and run it for 1 minute
+  // WiFiManager wifiManager;
+  // wifiManager.setTimeout(60); // 60 seconds
+  // wifiManager.setSaveParamsCallback([]() {
+  //   Serial.println("Save new WiFi credentials...");
+  // });
 
-  if (!wifiManager.startConfigPortal(INFLUXDB_BUCKET, "12345678")) {
-    Serial.println("Failed to connect and hit timeout");
-    // Handle if the connection attempt fails or times out
-    return;
-  }
+  // if (!wifiManager.startConfigPortal(INFLUXDB_BUCKET, "12345678")) {
+  //   Serial.println("Failed to connect and hit timeout");
+  //   // Handle if the connection attempt fails or times out
+  //   return;
+  // }
 
-  // If the control reaches here, the connection was successful or the portal timed out
-  Serial.println("Connected to WiFi");
+  // // If the control reaches here, the connection was successful or the portal timed out
+  // Serial.println("Connected to WiFi");
 
-  //Ptinting IP address
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println("final_ist");
-  //checkFileExists();
+  // //Ptinting IP address
+  // Serial.print("IP Address: ");
+  // Serial.println(WiFi.localIP());
+  // Serial.println("final_ist");
+  // //checkFileExists();
 }
 
 void loop() {
@@ -474,34 +484,36 @@ void loop() {
       gas = 9999;
       altitudeBme = 9999;
       gas = 9999;
-      sensor.clearFields();
-      sensor.addField("temperature", temperature);
-      sensor.addField("humidity", humidity);
-      sensor.addField("pressure", pressure);
-      sensor.addField("gas", gas);
-      sensor.addField("altitude", altitudeBme);
-      sensor.addField("pm1", val1);
-      sensor.addField("pm2.5", val2);
-      sensor.addField("pm10", val3);
-      sensor.addField("lat", lati);
-      sensor.addField("lng", longi);
-      sensor.addField("altitude_gps_1", atlt);
-      sensor.addField("Satellite_1", noS);
-      sensor.addField("g0.3", c_300);
-      sensor.addField("g0.5", c_500);
-      sensor.addField("g1.0", c_1000);
-      sensor.addField("g2.5", c_2500);
-      sensor.addField("g5.0", c_5000);
-      sensor.addField("g10.0", c_10000);
-      sensor.addField("pms_temp", pms_temp);
-      sensor.addField("pms_h", pms_h);
-      sensor.addField("pms_fld", pms_fld);
-      sensor.addField("dateTime", dateTime);
-      sensor.addField("pm1_atm", val4);
-      sensor.addField("pm2.5_atm", val5);
-      sensor.addField("pm10_atm", val6);
-      Serial.print("Writing: ");
-      Serial.println(sensor.toLineProtocol());
+
+      // Server Data Preparation
+      // sensor.clearFields();
+      // sensor.addField("temperature", temperature);
+      // sensor.addField("humidity", humidity);
+      // sensor.addField("pressure", pressure);
+      // sensor.addField("gas", gas);
+      // sensor.addField("altitude", altitudeBme);
+      // sensor.addField("pm1", val1);
+      // sensor.addField("pm2.5", val2);
+      // sensor.addField("pm10", val3);
+      // sensor.addField("lat", lati);
+      // sensor.addField("lng", longi);
+      // sensor.addField("altitude_gps_1", atlt);
+      // sensor.addField("Satellite_1", noS);
+      // sensor.addField("g0.3", c_300);
+      // sensor.addField("g0.5", c_500);
+      // sensor.addField("g1.0", c_1000);
+      // sensor.addField("g2.5", c_2500);
+      // sensor.addField("g5.0", c_5000);
+      // sensor.addField("g10.0", c_10000);
+      // sensor.addField("pms_temp", pms_temp);
+      // sensor.addField("pms_h", pms_h);
+      // sensor.addField("pms_fld", pms_fld);
+      // sensor.addField("dateTime", dateTime);
+      // sensor.addField("pm1_atm", val4);
+      // sensor.addField("pm2.5_atm", val5);
+      // sensor.addField("pm10_atm", val6);
+      // Serial.print("Writing: ");
+      // Serial.println(sensor.toLineProtocol());
       //ESP.restart();
       // Save data to SD card regardless of WiFi connection status    ` `
       //AQI calculation
@@ -634,196 +646,198 @@ void loop() {
       
 
 
-      
-      saveConfigCallback();
+      // Server Data Upload
+      // saveConfigCallback();
+
       checkFileExists();
       logDataSdCard();
       
       //oldDay = Day;
 
-      if (WiFi.status() == WL_CONNECTED) {
-        HTTPClient http;
-        http.begin(test_url); // Send HTTP GET request int httpCode = http.GET();
-        int httpCode = http.GET();
-        if(httpCode > 0){
-          http.end();
-          if (!client.writePoint(sensor)) {
-          Serial.print("InfluxDB Cloud write failed: ");
-          Serial.println(client.getLastErrorMessage());
-        }
-        int delimiterIndex = dateTime.indexOf(' ');
+      // Server WiFi Connection Management
+      // if (WiFi.status() == WL_CONNECTED) {
+      //   HTTPClient http;
+      //   http.begin(test_url); // Send HTTP GET request int httpCode = http.GET();
+      //   int httpCode = http.GET();
+      //   if(httpCode > 0){
+      //     http.end();
+      //     if (!client.writePoint(sensor)) {
+      //     Serial.print("InfluxDB Cloud write failed: ");
+      //     Serial.println(client.getLastErrorMessage());
+      //   }
+      //   int delimiterIndex = dateTime.indexOf(' ');
 
-        String Dated = dateTime.substring(0, delimiterIndex); 
-        //Serial.println(part1); // Extract the second part of the string 
-        String Timet = dateTime.substring(delimiterIndex + 1); 
-        Serial.println("Dated");
-        Serial.println(Dated);
-        Serial.println(Timet);
+      //   String Dated = dateTime.substring(0, delimiterIndex); 
+      //   //Serial.println(part1); // Extract the second part of the string 
+      //   String Timet = dateTime.substring(delimiterIndex + 1); 
+      //   Serial.println("Dated");
+      //   Serial.println(Dated);
+      //   Serial.println(Timet);
 
-        //Serial.println(part2);
-        int delimiter1Index = Timet.indexOf(':');
-        String hh = Timet.substring(0, delimiter1Index); 
-        //Serial.println(part1); // Extract the second part of the string 
-        String mm = Timet.substring(1,delimiter1Index);
-        //Serial.println(typeof(mm));
-        //Serial.println(TypeOf("16"));
-        //ESP.restart();
-        //ESP.reset();
-        //p
-        Serial.println("hh,mm");
-        Serial.println(mm);
-        Serial.println(hh);
-        Serial.println("hh,mm finished");
-        //readAndUploadCSVgps(filename);
-        //if (hh == String(15)) ESP.restart();
-        if ((hh == "18" )&&  (mm == "25")){
-          //FTP32 ftp("10.90.18.2", 8087);
-          int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+      //   //Serial.println(part2);
+      //   int delimiter1Index = Timet.indexOf(':');
+      //   String hh = Timet.substring(0, delimiter1Index); 
+      //   //Serial.println(part1); // Extract the second part of the string 
+      //   String mm = Timet.substring(1,delimiter1Index);
+      //   //Serial.println(typeof(mm));
+      //   //Serial.println(TypeOf("16"));
+      //   //ESP.restart();
+      //   //ESP.reset();
+      //   //p
+      //   Serial.println("hh,mm");
+      //   Serial.println(mm);
+      //   Serial.println(hh);
+      //   Serial.println("hh,mm finished");
+      //   //readAndUploadCSVgps(filename);
+      //   //if (hh == String(15)) ESP.restart();
+      //   if ((hh == "18" )&&  (mm == "25")){
+      //     //FTP32 ftp("10.90.18.2", 8087);
+      //     int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
 
-          int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+      //     int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
 
-          int y = istdate / 100;
+      //     int y = istdate / 100;
           
-          int m = istdate % 100; 
-          int d = istday;
-          d -= 1; // Subtract one day // Handle month transition 
-          if (d == 0) { 
-            m -= 1; 
-            if (m == 0) { 
-              m = 12; 
-              y -= 1; // Handle year transition
-            }
-            d = daysInMonth(m, y); // Get the last day of the previous month 
-          } 
-          if (d < 10) dateTime += "0";
-          dateTime += d;
-          dateTime += "-";
-          if (m < 10) dateTime += "0";
-          dateTime += m;
-          dateTime += "-";
-          dateTime += y;
+      //     int m = istdate % 100; 
+      //     int d = istday;
+      //     d -= 1; // Subtract one day // Handle month transition 
+      //     if (d == 0) { 
+      //       m -= 1; 
+      //       if (m == 0) { 
+      //         m = 12; 
+      //         y -= 1; // Handle year transition
+      //       }
+      //       d = daysInMonth(m, y); // Get the last day of the previous month 
+      //     } 
+      //     if (d < 10) dateTime += "0";
+      //     dateTime += d;
+      //     dateTime += "-";
+      //     if (m < 10) dateTime += "0";
+      //     dateTime += m;
+      //     dateTime += "-";
+      //     dateTime += y;
           
 
-          Serial.print("Yesterday's Date: "); 
-          Serial.print(d); 
-          Serial.print("/"); 
-          Serial.print(m); 
-          Serial.print("/"); 
-          Serial.println(y);
-          filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(dateTime) + ".csv";
-          readAndUploadCSVgps(filename);
-          //uploadonftp(olddate);
-          //          Ser
-          //ESP.restart();
-        }
-        if ((hh == "03" )&&  (mm == "20")){
-          ESP.restart();
-        }
-        if ((hh == "09" )&&  (mm == "20")){
-          ESP.restart();
-        }
-        if ((hh == "15" )&&  (mm == "20")){
-          ESP.restart();
-        }
-        if ((hh == "21" )&&  (mm == "20")){
-          ESP.restart();
-        }
+      //     Serial.print("Yesterday's Date: "); 
+      //     Serial.print(d); 
+      //     Serial.print("/"); 
+      //     Serial.print(m); 
+      //     Serial.print("/"); 
+      //     Serial.println(y);
+      //     filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(dateTime) + ".csv";
+      //     readAndUploadCSVgps(filename);
+      //     //uploadonftp(olddate);
+      //     //          Ser
+      //     //ESP.restart();
+      //   }
+      //   if ((hh == "03" )&&  (mm == "20")){
+      //     ESP.restart();
+      //   }
+      //   if ((hh == "09" )&&  (mm == "20")){
+      //     ESP.restart();
+      //   }
+      //   if ((hh == "15" )&&  (mm == "20")){
+      //     ESP.restart();
+      //   }
+      //   if ((hh == "21" )&&  (mm == "20")){
+      //     ESP.restart();
+      //   }
         
-        }
+      //   }
         
-      } else {
-        HTTPClient http;
-        http.begin(test_url);
-        int httpCode = http.GET();
-        if(httpCode > 0){
-          http.end();
-          connectToWifi();
-          if (!client.writePoint(sensor)) {
-            Serial.print("InfluxDB Cloud write failed: ");
-            Serial.println(client.getLastErrorMessage());
-          }
-          int delimiterIndex = dateTime.indexOf(' ');
+      // } else {
+      //   HTTPClient http;
+      //   http.begin(test_url);
+      //   int httpCode = http.GET();
+      //   if(httpCode > 0){
+      //     http.end();
+      //     connectToWifi();
+      //     if (!client.writePoint(sensor)) {
+      //       Serial.print("InfluxDB Cloud write failed: ");
+      //       Serial.println(client.getLastErrorMessage());
+      //     }
+      //     int delimiterIndex = dateTime.indexOf(' ');
 
-          String Dated = dateTime.substring(0, delimiterIndex); 
-          //Serial.println(part1); // Extract the second part of the string 
-          String Timet = dateTime.substring(delimiterIndex + 1); 
-          Serial.println("Dated");
-          Serial.println(Dated);
-          Serial.println(Timet);
+      //     String Dated = dateTime.substring(0, delimiterIndex); 
+      //     //Serial.println(part1); // Extract the second part of the string 
+      //     String Timet = dateTime.substring(delimiterIndex + 1); 
+      //     Serial.println("Dated");
+      //     Serial.println(Dated);
+      //     Serial.println(Timet);
 
-          //Serial.println(part2);
-          int delimiter1Index = Timet.indexOf(':');
-          String hh = Timet.substring(0, delimiter1Index); 
-          //Serial.println(part1); // Extract the second part of the string 
-          String mm = Timet.substring(1,delimiter1Index);
-          //Serial.println(typeof(mm));
-          //Serial.println(TypeOf("16"));
-          //ESP.restart();
-          //ESP.reset();
-          //p
-          Serial.println("hh,mm");
-          Serial.println(mm);
-          Serial.println(hh);
-          Serial.println("hh,mm finished");
-          //if (hh == String(15)) ESP.restart();
-          if (hh == "18" && mm == "25"){
-            //FTP32 ftp("10.90.18.2", 8087);
-            int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+      //     //Serial.println(part2);
+      //     int delimiter1Index = Timet.indexOf(':');
+      //     String hh = Timet.substring(0, delimiter1Index); 
+      //     //Serial.println(part1); // Extract the second part of the string 
+      //     String mm = Timet.substring(1,delimiter1Index);
+      //     //Serial.println(typeof(mm));
+      //     //Serial.println(TypeOf("16"));
+      //     //ESP.restart();
+      //     //ESP.reset();
+      //     //p
+      //     Serial.println("hh,mm");
+      //     Serial.println(mm);
+      //     Serial.println(hh);
+      //     Serial.println("hh,mm finished");
+      //     //if (hh == String(15)) ESP.restart();
+      //     if (hh == "18" && mm == "25"){
+      //       //FTP32 ftp("10.90.18.2", 8087);
+      //       int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
 
-            int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+      //       int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
 
-            int y = istdate / 100;
+      //       int y = istdate / 100;
             
-            int m = istdate % 100; 
-            int d = istday;
-            d -= 1; // Subtract one day // Handle month transition 
-            if (d == 0) { 
-              m -= 1; 
-              if (m == 0) { 
-                m = 12; 
-                y -= 1; // Handle year transition
-              }
-              d = daysInMonth(m, y); // Get the last day of the previous month 
-            } 
-            if (d < 10) dateTime += "0";
-            dateTime += d;
-            dateTime += "-";
-            if (m < 10) dateTime += "0";
-            dateTime += m;
-            dateTime += "-";
-            dateTime += y;
+      //       int m = istdate % 100; 
+      //       int d = istday;
+      //       d -= 1; // Subtract one day // Handle month transition 
+      //       if (d == 0) { 
+      //         m -= 1; 
+      //         if (m == 0) { 
+      //           m = 12; 
+      //           y -= 1; // Handle year transition
+      //         }
+      //         d = daysInMonth(m, y); // Get the last day of the previous month 
+      //       } 
+      //       if (d < 10) dateTime += "0";
+      //       dateTime += d;
+      //       dateTime += "-";
+      //       if (m < 10) dateTime += "0";
+      //       dateTime += m;
+      //       dateTime += "-";
+      //       dateTime += y;
             
 
-            Serial.print("Yesterday's Date: "); 
-            Serial.print(d); 
-            Serial.print("/"); 
-            Serial.print(m); 
-            Serial.print("/"); 
-            Serial.println(y);
-            filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(dateTime) + ".csv";
-            readAndUploadCSVgps(filename);
-            //uploadonftp(olddate);
-            //          Ser
-            //ESP.restart();
+      //       Serial.print("Yesterday's Date: "); 
+      //       Serial.print(d); 
+      //       Serial.print("/"); 
+      //       Serial.print(m); 
+      //       Serial.print("/"); 
+      //       Serial.println(y);
+      //       filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(dateTime) + ".csv";
+      //       readAndUploadCSVgps(filename);
+      //       //uploadonftp(olddate);
+      //       //          Ser
+      //       //ESP.restart();
             
-          }
+      //     }
 
-          if ((hh == "03" )&&  (mm == "20")){
-            ESP.restart();
-          }
-          if ((hh == "09" )&&  (mm == "20")){
-            ESP.restart();
-          }
-          if ((hh == "15" )&&  (mm == "20")){
-            ESP.restart();
-          }
-          if ((hh == "21" )&&  (mm == "20")){
-            ESP.restart();
-          }
+      //     if ((hh == "03" )&&  (mm == "20")){
+      //       ESP.restart();
+      //     }
+      //     if ((hh == "09" )&&  (mm == "20")){
+      //       ESP.restart();
+      //     }
+      //     if ((hh == "15" )&&  (mm == "20")){
+      //       ESP.restart();
+      //     }
+      //     if ((hh == "21" )&&  (mm == "20")){
+      //       ESP.restart();
+      //     }
           
          
 
-        }
+      //   }
         
       }
       
@@ -834,53 +848,55 @@ void loop() {
     
   } 
 }
-void saveConfigCallback() {
-  Serial.println("Saving WiFi configuration");
-  //delayMicroseconds(5000000);
-  //delayMicroseconds(5000000);
-}
-void connectToWifi() {
-  // Check if WiFi is already connected
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("Already connected to WiFi!");
-    Serial.println("Wait 20s");
-    delay(2000);
-    return;
-  }
+
+// Server Callback Functions
+// void saveConfigCallback() {
+//   Serial.println("Saving WiFi configuration");
+//   //delayMicroseconds(5000000);
+//   //delayMicroseconds(5000000);
+// }
+// void connectToWifi() {
+//   // Check if WiFi is already connected
+//   if (WiFi.status() == WL_CONNECTED) {
+//     Serial.println("Already connected to WiFi!");
+//     Serial.println("Wait 20s");
+//     delay(2000);
+//     return;
+//   }
   
-  // Attempt to connect using saved credentials for 20 seconds
-  unsigned long wifiStartTime = millis(); // Record the start time of WiFi connection attempt
-  while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < 200) { // Try for 20 seconds
-    WiFi.begin(); // Attempt to reconnect using saved credentials
-    delay(500);
-  }
+//   // Attempt to connect using saved credentials for 20 seconds
+//   unsigned long wifiStartTime = millis(); // Record the start time of WiFi connection attempt
+//   while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < 200) { // Try for 20 seconds
+//     WiFi.begin(); // Attempt to reconnect using saved credentials
+//     delay(500);
+//   }
 
-  // If WiFi connection is established, display IP address and exit the function
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("Connected to WiFi!");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-    return;
-  }
-  // Start the WiFi configuration portal and run it for 1 minute
-  WiFiManager wifiManager;
-  wifiManager.setTimeout(1); // 60 seconds
-  wifiManager.setSaveParamsCallback([]() {
-    Serial.println("Save new WiFi credentials...");
-  });
+//   // If WiFi connection is established, display IP address and exit the function
+//   if (WiFi.status() == WL_CONNECTED) {
+//     Serial.println("Connected to WiFi!");
+//     Serial.print("IP Address: ");
+//     Serial.println(WiFi.localIP());
+//     return;
+//   }
+//   // Start the WiFi configuration portal and run it for 1 minute
+//   WiFiManager wifiManager;
+//   wifiManager.setTimeout(1); // 60 seconds
+//   wifiManager.setSaveParamsCallback([]() {
+//     Serial.println("Save new WiFi credentials...");
+//   });
 
-  if (!wifiManager.startConfigPortal(INFLUXDB_BUCKET, "12345678")) {
-    Serial.println("Failed to connect and hit timeout");
-    // Handle if the connection attempt fails or times out
-    return;
-  }
-  // If the control reaches here, the connection was successful or the portal timed out
-  Serial.println("Connected to WiFi");
-  //Ptinting IP address
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-  //WiFi.status();
-}
+//   if (!wifiManager.startConfigPortal(INFLUXDB_BUCKET, "12345678")) {
+//     Serial.println("Failed to connect and hit timeout");
+//     // Handle if the connection attempt fails or times out
+//     return;
+//   }
+//   // If the control reaches here, the connection was successful or the portal timed out
+//   Serial.println("Connected to WiFi");
+//   //Ptinting IP address
+//   Serial.print("IP Address: ");
+//   Serial.println(WiFi.localIP());
+//   //WiFi.status();
+// }
 
 String getDateFromGPS(TinyGPSDate &date, TinyGPSTime &time) {
   utcHour = time.hour();
