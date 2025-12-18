@@ -165,10 +165,13 @@ bool setupWiFiFirstTime()
 
 bool isRTCValid()
 {
+  bool centuryFlag;
+  bool h12Flag, pmFlag;
+
   int y = rtcModule.getYear();
-  int m = rtcModule.getMonth(false);
+  int m = rtcModule.getMonth(centuryFlag);
   int d = rtcModule.getDate();
-  int h = rtcModule.getHour(false, false);
+  int h = rtcModule.getHour(h12Flag, pmFlag);
 
   // Year >= 2024 and reasonable date
   return (y >= 24 && m >= 1 && m <= 12 && d >= 1 && d <= 31 && h <= 23);
@@ -570,13 +573,17 @@ void setup()
 
   if (isRTCValid())
   {
+    bool centuryFlag;
+    bool h12Flag, pmFlag;
+
     setTime(
-        rtcModule.getHour(false, false),
+        rtcModule.getHour(h12Flag, pmFlag),
         rtcModule.getMinute(),
         rtcModule.getSecond(),
         rtcModule.getDate(),
-        rtcModule.getMonth(false),
+        rtcModule.getMonth(centuryFlag),
         2000 + rtcModule.getYear());
+
     rtcSynced = true;
     lastNtpSyncEpoch = now();
     Serial.println("RTC time loaded");
