@@ -6,7 +6,6 @@
 // #include <string>
 #include <PMS5003.h>
 #include <HardwareSerial.h>
-#include <TinyGPS++.h>
 #include <Wire.h>
 // Server Libraries
 // #include <WiFi.h>
@@ -104,8 +103,6 @@ bool wifiConfigured = false;
 // ================================
 Adafruit_BME680 bme; // I2C
 GuL::PMS5003 pms(Serial2);
-TinyGPSPlus gps;
-HardwareSerial GPS(1);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 DHT_Unified dht(DHTPIN, DHTTYPE);
 DS3231 rtcModule;
@@ -294,65 +291,6 @@ void syncRTCFromSystemTime()
   display.setCursor(0, 0);
   display.println("RTC synced from NTP");
   // delay(500);
-}
-
-void syncRTCFromGPS(const TinyGPSDate &date, const TinyGPSTime &time)
-{
-  int year = date.year() - 2000;
-  int month = date.month();
-  int day = date.day();
-
-  int hour = time.hour();
-  int minute = time.minute();
-  int second = time.second();
-
-  // Convert UTC → IST (+5:30)
-  minute += 30;
-  if (minute >= 60)
-  {
-    minute -= 60;
-    hour++;
-  }
-
-  hour += 5;
-  if (hour >= 24)
-  {
-    hour -= 24;
-    incrementDate(year, month, day);
-  }
-
-  // Write IST directly to RTC
-  rtcModule.setYear(year);
-  rtcModule.setMonth(month);
-  rtcModule.setDate(day);
-  rtcModule.setHour(hour);
-  rtcModule.setMinute(minute);
-  rtcModule.setSecond(second);
-
-  rtcSynced = true;
-}
-
-void incrementDate(int &y, int &m, int &d)
-{
-  static const int daysInMonth[] =
-      {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-
-  int dim = daysInMonth[m - 1];
-
-  if (m == 2 && ((y % 4) == 0))
-    dim = 29;
-
-  d++;
-  if (d > dim)
-  {
-    d = 1;
-    m++;
-    if (m > 12)
-    {
-      m = 1;
-      y++;
-    }
-  }
 }
 
 // ================================
@@ -738,7 +676,6 @@ void setup()
   Serial2.begin(9600);
   Serial2.begin(9600, SERIAL_8N1, RX2, TX2);
   Serial.println("final_gps_rtc_bme_dht_20241110");
-  GPS.begin(9600, SERIAL_8N1, 26, 27);
 
   // Initialize Display
   Wire.begin();
@@ -938,330 +875,43 @@ void loop()
     }
   }
 
-  if (GPS.available())
+  // GPS not available, use RTC as fallback
+  Serial.println("GPS not available, using RTC");
+
+  i = i + 1;
+
+  // Set default GPS coordinates when GPS is not available
+  latitude = 23.038126;
+  longitude = 72.552605;
+  lati = String(latitude, 6);
+  longi = String(longitude, 6);
+  atlt = "0";
+  noS = "0";
+
+  rem = i % 5;
+  if (rem == 0)
   {
-    if (!rtcSynced && gps.date.isValid() && gps.time.isValid())
-    {
-      syncRTCFromGPS(gps.date, gps.time);
-    }
-
-    if (gps.encode(GPS.read()))
-    {
-      Serial.println("GPS Data Available");
-      i = i + 1;
-      latitude = gps.location.lat();
-      longitude = gps.location.lng();
-      atlt = String(gps.altitude.meters());
-      noS = String(gps.satellites.value());
-      // Serial.println(n);
-      latitude = gps.location.lat();
-      lati = String(latitude, 6);
-      longitude = gps.location.lng();
-      longi = String(longitude, 6);
-      atlt = gps.altitude.meters();
-      noS = gps.satellites.value();
-      // ESP.restart();
-
-      // dateTime = getDateTimeFromGPS(gps.date, gps.time);
-
-      // delay(10);
-      rem = i % 5;
-      if (rem == 0)
-      {
-        readPMSSensor();
-      }
-
-      checkFileExists();
-      readSensors();
-
-      // Server Data Preparation
-      // sensor.clearFields();
-      // sensor.addField("temperature", temperature);
-      // sensor.addField("humidity", humidity);
-      // sensor.addField("pressure", pressure);
-      // sensor.addField("gas", gas);
-      // sensor.addField("altitude", altitudeBme);
-      // sensor.addField("pm1", val1);
-      // sensor.addField("pm2.5", val2);
-      // sensor.addField("pm10", val3);
-      // sensor.addField("lat", lati);
-      // sensor.addField("lng", longi);
-      // sensor.addField("altitude_gps_1", atlt);
-      // sensor.addField("Satellite_1", noS);
-      // sensor.addField("g0.3", c_300);
-      // sensor.addField("g0.5", c_500);
-      // sensor.addField("g1.0", c_1000);
-      // sensor.addField("g2.5", c_2500);
-      // sensor.addField("g5.0", c_5000);
-      // sensor.addField("g10.0", c_10000);
-      // sensor.addField("pms_temp", pms_temp);
-      // sensor.addField("pms_h", pms_h);
-      // sensor.addField("pms_fld", pms_fld);
-      // sensor.addField("dateTime", dateTime);
-      // sensor.addField("pm1_atm", val4);
-      // sensor.addField("pm2.5_atm", val5);
-      // sensor.addField("pm10_atm", val6);
-      // Serial.print("Writing: ");
-      // Serial.println(sensor.toLineProtocol());
-      // ESP.restart();
-      // Save data to SD card regardless of WiFi connection status    ` `
-
-      calculateAQI();
-      updateDisplay("Using GPS Time");
-
-      // Serial.println(dateTime);
-      // Serial.print("now day =");
-      // Serial.println(nowDay);
-      // Serial.println(nowDay);
-      // String x = strtok(dateTime," ").tostr();
-      Date = getRTCDate();
-      // String dateTime = "";
-      dateTime = getRTCDateTime();
-      // Date =  x[0];
-      Serial.println("1");
-      Serial.println(Date);
-      Serial.println("1");
-      Serial.println(Day);
-      Serial.println(Month);
-      Serial.println(Year);
-
-      rem = i % 5;
-      if (rem == 0)
-      {
-        updateAQIDisplay();
-        // readAndUploadCSVgps(filename);
-      }
-
-      // Server Data Upload
-      // saveConfigCallback();
-
-      checkFileExists();
-      logDataSdCard();
-
-      // oldDay = Day;
-
-      // Server WiFi Connection Management
-      // if (WiFi.status() == WL_CONNECTED) {
-      //   HTTPClient http;
-      //   http.begin(test_url); // Send HTTP GET request int httpCode = http.GET();
-      //   int httpCode = http.GET();
-      //   if(httpCode > 0){
-      //     http.end();
-      //     if (!client.writePoint(sensor)) {
-      //     Serial.print("InfluxDB Cloud write failed: ");
-      //     Serial.println(client.getLastErrorMessage());
-      //   }
-      //   int delimiterIndex = dateTime.indexOf(' ');
-
-      //   String Dated = dateTime.substring(0, delimiterIndex);
-      //   //Serial.println(part1); // Extract the second part of the string
-      //   String Timet = dateTime.substring(delimiterIndex + 1);
-      //   Serial.println("Dated");
-      //   Serial.println(Dated);
-      //   Serial.println(Timet);
-
-      //   //Serial.println(part2);
-      //   int delimiter1Index = Timet.indexOf(':');
-      //   String hh = Timet.substring(0, delimiter1Index);
-      //   //Serial.println(part1); // Extract the second part of the string
-      //   String mm = Timet.substring(1,delimiter1Index);
-      //   //Serial.println(typeof(mm));
-      //   //Serial.println(TypeOf("16"));
-      //   //ESP.restart();
-      //   //ESP.reset();
-      //   //p
-      //   Serial.println("hh,mm");
-      //   Serial.println(mm);
-      //   Serial.println(hh);
-      //   Serial.println("hh,mm finished");
-      //   //readAndUploadCSVgps(filename);
-      //   //if (hh == String(15)) ESP.restart();
-      //   if ((hh == "18" )&&  (mm == "25")){
-      //     //FTP32 ftp("10.90.18.2", 8087);
-      //     int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-
-      //     int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-
-      //     int y = istdate / 100;
-
-      //     int m = istdate % 100;
-      //     int d = istday;
-      //     d -= 1; // Subtract one day // Handle month transition
-      //     if (d == 0) {
-      //       m -= 1;
-      //       if (m == 0) {
-      //         m = 12;
-      //         y -= 1; // Handle year transition
-      //       }
-      //       d = daysInMonth(m, y); // Get the last day of the previous month
-      //     }
-      //     if (d < 10) dateTime += "0";
-      //     dateTime += d;
-      //     dateTime += "-";
-      //     if (m < 10) dateTime += "0";
-      //     dateTime += m;
-      //     dateTime += "-";
-      //     dateTime += y;
-
-      //     Serial.print("Yesterday's Date: ");
-      //     Serial.print(d);
-      //     Serial.print("/");
-      //     Serial.print(m);
-      //     Serial.print("/");
-      //     Serial.println(y);
-      //     filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(dateTime) + ".csv";
-      //     readAndUploadCSVgps(filename);
-      //     //uploadonftp(olddate);
-      //     //          Ser
-      //     //ESP.restart();
-      //   }
-      //   if ((hh == "03" )&&  (mm == "20")){
-      //     ESP.restart();
-      //   }
-      //   if ((hh == "09" )&&  (mm == "20")){
-      //     ESP.restart();
-      //   }
-      //   if ((hh == "15" )&&  (mm == "20")){
-      //     ESP.restart();
-      //   }
-      //   if ((hh == "21" )&&  (mm == "20")){
-      //     ESP.restart();
-      //   }
-
-      //   }
-
-      // } else {
-      //   HTTPClient http;
-      //   http.begin(test_url);
-      //   int httpCode = http.GET();
-      //   if(httpCode > 0){
-      //     http.end();
-      //     connectToWifi();
-      //     if (!client.writePoint(sensor)) {
-      //       Serial.print("InfluxDB Cloud write failed: ");
-      //       Serial.println(client.getLastErrorMessage());
-      //     }
-      //     int delimiterIndex = dateTime.indexOf(' ');
-
-      //     String Dated = dateTime.substring(0, delimiterIndex);
-      //     //Serial.println(part1); // Extract the second part of the string
-      //     String Timet = dateTime.substring(delimiterIndex + 1);
-      //     Serial.println("Dated");
-      //     Serial.println(Dated);
-      //     Serial.println(Timet);
-
-      //     //Serial.println(part2);
-      //     int delimiter1Index = Timet.indexOf(':');
-      //     String hh = Timet.substring(0, delimiter1Index);
-      //     //Serial.println(part1); // Extract the second part of the string
-      //     String mm = Timet.substring(1,delimiter1Index);
-      //     //Serial.println(typeof(mm));
-      //     //Serial.println(TypeOf("16"));
-      //     //ESP.restart();
-      //     //ESP.reset();
-      //     //p
-      //     Serial.println("hh,mm");
-      //     Serial.println(mm);
-      //     Serial.println(hh);
-      //     Serial.println("hh,mm finished");
-      //     //if (hh == String(15)) ESP.restart();
-      //     if (hh == "18" && mm == "25"){
-      //       //FTP32 ftp("10.90.18.2", 8087);
-      //       int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-
-      //       int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-
-      //       int y = istdate / 100;
-
-      //       int m = istdate % 100;
-      //       int d = istday;
-      //       d -= 1; // Subtract one day // Handle month transition
-      //       if (d == 0) {
-      //         m -= 1;
-      //         if (m == 0) {
-      //           m = 12;
-      //           y -= 1; // Handle year transition
-      //         }
-      //         d = daysInMonth(m, y); // Get the last day of the previous month
-      //       }
-      //       if (d < 10) dateTime += "0";
-      //       dateTime += d;
-      //       dateTime += "-";
-      //       if (m < 10) dateTime += "0";
-      //       dateTime += m;
-      //       dateTime += "-";
-      //       dateTime += y;
-
-      //       Serial.print("Yesterday's Date: ");
-      //       Serial.print(d);
-      //       Serial.print("/");
-      //       Serial.print(m);
-      //       Serial.print("/");
-      //       Serial.println(y);
-      //       filename = String(S1) + String(INFLUXDB_BUCKET) + "_" + String(dateTime) + ".csv";
-      //       readAndUploadCSVgps(filename);
-      //       //uploadonftp(olddate);
-      //       //          Ser
-      //       //ESP.restart();
-
-      //     }
-
-      //     if ((hh == "03" )&&  (mm == "20")){
-      //       ESP.restart();
-      //     }
-      //     if ((hh == "09" )&&  (mm == "20")){
-      //       ESP.restart();
-      //     }
-      //     if ((hh == "15" )&&  (mm == "20")){
-      //       ESP.restart();
-      //     }
-      //     if ((hh == "21" )&&  (mm == "20")){
-      //       ESP.restart();
-      //     }
-      //   }
-      // }
-    }
+    readPMSSensor();
   }
-  else
+
+  checkFileExists();
+  readSensors();
+  calculateAQI();
+
+  // Use RTC for date and time
+  dateTime = getRTCDateTime();
+  Date = getRTCDate();
+
+  updateDisplay("Using RTC Time");
+
+  rem = i % 5;
+  if (rem == 0)
   {
-    // GPS not available, use RTC as fallback
-    Serial.println("GPS not available, using RTC");
-
-    i = i + 1;
-
-    // Set default GPS coordinates when GPS is not available
-    latitude = 23.038126;
-    longitude = 72.552605;
-    lati = String(latitude, 6);
-    longi = String(longitude, 6);
-    atlt = "0";
-    noS = "0";
-
-    rem = i % 5;
-    if (rem == 0)
-    {
-      readPMSSensor();
-    }
-
-    checkFileExists();
-    readSensors();
-    calculateAQI();
-
-    // Use RTC for date and time
-    dateTime = getRTCDateTime();
-    Date = getRTCDate();
-
-    updateDisplay("Using RTC Time");
-
-    rem = i % 5;
-    if (rem == 0)
-    {
-      updateAQIDisplay();
-    }
-
-    checkFileExists();
-    logDataSdCard();
-
-    Serial.println("Data logged using RTC time: " + dateTime);
+    updateAQIDisplay();
   }
+
+  checkFileExists();
+  logDataSdCard();
+
+  Serial.println("Data logged using RTC time: " + dateTime);
 }
