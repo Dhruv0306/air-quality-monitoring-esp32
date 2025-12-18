@@ -83,6 +83,8 @@ bool wifiConnected = false; // Global variable to track WiFi connection status
 bool rtcSynced = false;
 bool ntpSynced = false;
 bool wifiConfigured = false;
+time_t lastNtpSyncEpoch = 0;
+String lastFileDate = "";
 
 // ================================
 // HARDWARE OBJECTS
@@ -166,7 +168,10 @@ bool isRTCValid()
   int y = rtcModule.getYear();
   int m = rtcModule.getMonth(false);
   int d = rtcModule.getDate();
-  return (y >= 24 && m >= 1 && m <= 12 && d >= 1 && d <= 31);
+  int h = rtcModule.getHour(false, false);
+
+  // Year >= 2024 and reasonable date
+  return (y >= 24 && m >= 1 && m <= 12 && d >= 1 && d <= 31 && h <= 23);
 }
 
 // ================================
@@ -237,12 +242,6 @@ void syncRTCFromSystemTime()
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo))
   {
-    display.clearDisplay();
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.println("Sync Failed From NTP");
-    delay(500);
     return;
   }
 
@@ -254,13 +253,8 @@ void syncRTCFromSystemTime()
   rtcModule.setSecond(timeinfo.tm_sec);
 
   rtcSynced = true;
+  lastNtpSyncEpoch = now();
   Serial.println("RTC synced from NTP");
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("RTC synced from NTP");
-  // delay(500);
 }
 
 // ================================
@@ -270,15 +264,15 @@ void readSensors()
 {
   // Read DHT sensor
   sensors_event_t event;
-  Serial.println("dht.begin();");
+  // Serial.println("dht.begin();");
   dht.temperature().getEvent(&event);
   temperature = event.temperature;
 
-  Serial.println(temperature);
+  // Serial.println(temperature);
   // Get humidity event and print its value.
   dht.humidity().getEvent(&event);
   humidity = event.relative_humidity;
-  Serial.println(humidity);
+  // Serial.println(humidity);
   pressure = 9999;
   gas = 9999;
   altitudeBme = 9999;
@@ -440,9 +434,11 @@ void checkFileExists()
 
   // Use RTC time for file naming
   date += (2000 + rtcYear);
+  date += "-";
   if (rtcMonth < 10)
     date += "0";
   date += rtcMonth;
+  date += "-";
   if (rtcDay < 10)
     date += "0";
   date += rtcDay;
@@ -545,7 +541,6 @@ void logDataSdCard()
 void setup()
 {
   Serial.begin(9600);
-  Serial2.begin(9600);
   Serial2.begin(9600, SERIAL_8N1, RX2, TX2);
   Serial.println("final_gps_rtc_bme_dht_20241110");
 
@@ -559,27 +554,13 @@ void setup()
     while (true)
       ;
   }
-
-  if (isRTCValid())
-  {
-    rtcSynced = true;
-  }
+  // Initialize RTC
+  Serial.println("RTC initialized");
 
   // NTP Time
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("Connecting Wifi...");
-
   if (WiFi.SSID().length() == 0)
   {
     Serial.println("First boot detected");
-    display.clearDisplay();
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.println("First boot detected");
     wifiConfigured = setupWiFiFirstTime();
   }
   else
@@ -587,42 +568,42 @@ void setup()
     WiFi.begin(); // auto connect
   }
 
-  unsigned long startAttempt = millis();
-  while (!rtcSynced && WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000)
+  if (isRTCValid())
   {
-    delay(500);
+    setTime(
+        rtcModule.getHour(false, false),
+        rtcModule.getMinute(),
+        rtcModule.getSecond(),
+        rtcModule.getDate(),
+        rtcModule.getMonth(false),
+        2000 + rtcModule.getYear());
+    rtcSynced = true;
+    lastNtpSyncEpoch = now();
+    Serial.println("RTC time loaded");
   }
 
-  if (!rtcSynced && WiFi.status() == WL_CONNECTED)
+  if (WiFi.status() == WL_CONNECTED)
   {
     Serial.println("WiFi connected");
-    display.clearDisplay();
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.println("Connecting Wifi...");
-    // delay(500);
 
     if (syncTimeFromNTP())
     {
       syncRTCFromSystemTime();
       ntpSynced = true;
+      rtcSynced = true;
     }
   }
 
   // pms7003.init(&Serial2);
   pms.setToPassiveReporting();
 
-  // Initialize RTC
-  Serial.println("RTC initialized");
-
   // Server Setup
   // connectToWifi();
 
+  dht.begin();
   if (!bme.begin())
   {
     Serial.println("Could not find a valid BME680 sensor, check wiring!");
-    dht.begin();
 
     sensor_t sensor;
     dht.temperature().getSensor(&sensor);
@@ -675,6 +656,35 @@ void setup()
 }
 
 // ================================
+// NTP PERIODIC SYNC FUNCTION
+// ================================
+void periodicNtpSync()
+{
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck < 60000)
+    return;
+  lastCheck = millis();
+
+  if (WiFi.status() != WL_CONNECTED)
+    return;
+
+  time_t currentTime = now(); // RTC-based
+
+  if (currentTime < 100000)
+    return;
+
+  if (currentTime - lastNtpSyncEpoch >= 24UL * 60UL * 60UL)
+  {
+    Serial.println("24h elapsed, syncing RTC from NTP");
+
+    if (syncTimeFromNTP())
+    {
+      syncRTCFromSystemTime();
+    }
+  }
+}
+
+// ================================
 // MAIN LOOP
 // ================================
 void loop()
@@ -686,21 +696,10 @@ void loop()
   // delay(20);
   // String datetime = "";
 
-  static unsigned long lastNtpSync = 0;
-
-  if (!rtcSynced && WiFi.status() == WL_CONNECTED && millis() - lastNtpSync > 6UL * 60 * 60 * 1000)
-  {
-    if (!rtcSynced && syncTimeFromNTP())
-    {
-      syncRTCFromSystemTime();
-      lastNtpSync = millis();
-    }
-  }
+  periodicNtpSync();
 
   // GPS not available, use RTC as fallback
   Serial.println("GPS not available, using RTC");
-
-  i = i + 1;
 
   // Set default GPS coordinates when GPS is not available
   latitude = 23.038126;
@@ -710,13 +709,19 @@ void loop()
   atlt = "0";
   noS = "0";
 
-  rem = i % 5;
-  if (rem == 0)
+  static unsigned long lastPmsRead = 0;
+  if (millis() - lastPmsRead >= 2000)
   {
     readPMSSensor();
+    lastPmsRead = millis();
   }
 
-  checkFileExists();
+  String today = getRTCDate();
+  if (today != lastFileDate)
+  {
+    checkFileExists();
+    lastFileDate = today;
+  }
   readSensors();
   calculateAQI();
 
@@ -732,7 +737,6 @@ void loop()
     updateAQIDisplay();
   }
 
-  checkFileExists();
   logDataSdCard();
 
   Serial.println("Data logged using RTC time: " + dateTime);
