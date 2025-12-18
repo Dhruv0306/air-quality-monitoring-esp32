@@ -1,33 +1,19 @@
 // ================================
 // LIBRARY INCLUDES
 // ================================
-// #include "Plantower_PMS7003.h"
-// #include <Arduino.h>
-// #include <string>
 #include <PMS5003.h>
 #include <HardwareSerial.h>
 #include <Wire.h>
-// Server Libraries
-// #include <WiFi.h>
-// #include <InfluxDbClient.h>
-// #include <InfluxDbCloud.h>
-// #include <WiFiManager.h>
 #include <Adafruit_BME680.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "FS.h"
 #include "SD.h"
 #include <SPI.h>
-// #include <string.h>
 #include <TimeLib.h>
-// Time Libraries
 #include <WiFi.h>
 #include <time.h>
 #include <WiFiManager.h>
-
-// Server Libraries
-// #include <HTTPClient.h>
-// const char* test_url = "http://www.google.com";
 #include <DS3231.h>
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
@@ -106,22 +92,6 @@ GuL::PMS5003 pms(Serial2);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 DHT_Unified dht(DHTPIN, DHTTYPE);
 DS3231 rtcModule;
-
-// Server Related
-// const char* WIFI_SSID = "Yap";
-// const char* WIFI_PASSWORD = "letstest";
-// #define INFLUXDB_URL "http://103.233.171.34:8086"
-// #define INFLUXDB_TOKEN "A-XmUWeZyP_5w8xTxfd1rImg90GPBizsQiQR2qx0ZWgxG-YecEWAz08K3kApq43uu56DPeAumVuqMARv-7ZO6w=="
-// #define INFLUXDB_ORG "6ecfc9383074a24b"
-// InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN, InfluxDbCloud2CACert);
-// Point sensor(INFLUXDB_MEASUREMENT);
-
-// ftpserver
-//  #include <FTPClient.h>
-//  #define FTP32_LOG FTP32_LOG_INFO
-//  #include "ftp32.h"
-//  const char* ftpuser = "SAS_Lab409";
-//  const char* ftpPass = "123";
 
 // ================================
 // UTILITY FUNCTIONS
@@ -570,104 +540,6 @@ void logDataSdCard()
 }
 
 // ================================
-// SERVER FUNCTIONS (COMMENTED)
-// ================================
-// Server Functions
-// void readAndUploadCSVgps(String filename) {
-//   File file = SD.open("/" +filename);
-//   if (!file) {
-//     Serial.println("Failed to open file!");
-//     return;
-//   }
-//   int lineNum = 0;
-//   while (file.available()) {
-//     String line = file.readStringUntil('\n');
-//     String remoteFilePath = "/line_" + String(lineNum) + ".txt"; // Change the remote file path as needed
-//     FTP32 ftp("103.233.171.34", 8087);
-//     //size_t dataSize = strlen(line);
-//     Serial.println("File reading started");
-//     if( ftp.connectWithPassword("SAS_Lab409", "Aqiguj@700") ){
-
-//       Serial.println("Login unsuccessful");
-//       Serial.printf("Exited with code: %d %s\n", ftp.getLastCode(), ftp.getLastMsg());
-//       while(true){}
-//     }
-//     if (ftp.uploadSingleshot(filename.c_str(), (uint8_t*) line.c_str(), line.length() ,FTP32::OpenType::CREATE_REPLACE)) {
-//       Serial.println("Upload failed");
-//       Serial.printf("Exited with code: %d %s\n", ftp.getLastCode(), ftp.getLastMsg().c_str());
-//       break;
-//     } else {
-//       Serial.printf("Uploaded line %d successfully: %s\n", lineNum, line.c_str());
-//     }
-//     lineNum++;
-//   }
-
-//   file.close();
-// }
-
-// Server Callbacks
-// void readMacAddress(){
-//   uint8_t baseMac[6];
-//   esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
-//   if (ret == ESP_OK) {
-//     Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
-//                   baseMac[0], baseMac[1], baseMac[2],
-//                   baseMac[3], baseMac[4], baseMac[5]);
-//   } else {
-//     Serial.println("Failed to read MAC address");
-//   }
-// }
-
-// Server Callback Functions
-// void saveConfigCallback() {
-//   Serial.println("Saving WiFi configuration");
-//   //delayMicroseconds(5000000);
-//   //delayMicroseconds(5000000);
-// }
-// void connectToWifi() {
-//   // Check if WiFi is already connected
-//   if (WiFi.status() == WL_CONNECTED) {
-//     Serial.println("Already connected to WiFi!");
-//     Serial.println("Wait 20s");
-//     delay(2000);
-//     return;
-//   }
-
-//   // Attempt to connect using saved credentials for 20 seconds
-//   unsigned long wifiStartTime = millis(); // Record the start time of WiFi connection attempt
-//   while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < 200) { // Try for 20 seconds
-//     WiFi.begin(); // Attempt to reconnect using saved credentials
-//     delay(500);
-//   }
-
-//   // If WiFi connection is established, display IP address and exit the function
-//   if (WiFi.status() == WL_CONNECTED) {
-//     Serial.println("Connected to WiFi!");
-//     Serial.print("IP Address: ");
-//     Serial.println(WiFi.localIP());
-//     return;
-//   }
-//   // Start the WiFi configuration portal and run it for 1 minute
-//   WiFiManager wifiManager;
-//   wifiManager.setTimeout(1); // 60 seconds
-//   wifiManager.setSaveParamsCallback([]() {
-//     Serial.println("Save new WiFi credentials...");
-//   });
-
-//   if (!wifiManager.startConfigPortal(INFLUXDB_BUCKET, "12345678")) {
-//     Serial.println("Failed to connect and hit timeout");
-//     // Handle if the connection attempt fails or times out
-//     return;
-//   }
-//   // If the control reaches here, the connection was successful or the portal timed out
-//   Serial.println("Connected to WiFi");
-//   //Ptinting IP address
-//   Serial.print("IP Address: ");
-//   Serial.println(WiFi.localIP());
-//   //WiFi.status();
-// }
-
-// ================================
 // SETUP FUNCTION
 // ================================
 void setup()
@@ -800,56 +672,6 @@ void setup()
   bme.setGasHeater(320, 150);
 
   SD.begin(SD_CS);
-
-  // Server Setup
-  // readMacAddress();
-  // checkFileExists();
-  // saveConfigCallback();
-
-  // wifi setup for first time
-  //  if (WiFi.status() == WL_CONNECTED) {
-  //    Serial.println("Already connected to WiFi!");
-  //    Serial.println("Wait 20s");
-  //    delay(20000);
-  //    return;
-  //  }
-
-  // Attempt to connect using saved credentials for 20 seconds
-  // unsigned long wifiStartTime = millis(); // Record the start time of WiFi connection attempt
-  // while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < 20000) { // Try for 20 seconds
-  //   WiFi.begin(); // Attempt to reconnect using saved credentials
-  //   delay(500);
-  // }
-
-  // // If WiFi connection is established, display IP address and exit the function
-  // if (WiFi.status() == WL_CONNECTED) {
-  //   Serial.println("Connected to WiFi!");
-  //   Serial.print("IP Address: ");
-  //   Serial.println(WiFi.localIP());
-  //   return;
-  // }
-
-  // // Start the WiFi configuration portal and run it for 1 minute
-  // WiFiManager wifiManager;
-  // wifiManager.setTimeout(60); // 60 seconds
-  // wifiManager.setSaveParamsCallback([]() {
-  //   Serial.println("Save new WiFi credentials...");
-  // });
-
-  // if (!wifiManager.startConfigPortal(INFLUXDB_BUCKET, "12345678")) {
-  //   Serial.println("Failed to connect and hit timeout");
-  //   // Handle if the connection attempt fails or times out
-  //   return;
-  // }
-
-  // // If the control reaches here, the connection was successful or the portal timed out
-  // Serial.println("Connected to WiFi");
-
-  // //Ptinting IP address
-  // Serial.print("IP Address: ");
-  // Serial.println(WiFi.localIP());
-  // Serial.println("final_ist");
-  // //checkFileExists();
 }
 
 // ================================
