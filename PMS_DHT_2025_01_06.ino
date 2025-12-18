@@ -194,196 +194,12 @@ bool setupWiFiFirstTime()
   return true;
 }
 
-// ================================
-// TIME CONVERSION FUNCTIONS
-// ================================
-int convertUtcToIstdate(int utcYear, int utcMonth, int utcDay, int utcHour, int utcMinute, int utcSecond)
+bool isRTCValid()
 {
-  int year = utcYear;
-  int month = utcMonth;
-  int day = utcDay;
-  int hour = utcHour + 5;      // India is 5 hours ahead of UTC
-  int minute = utcMinute + 30; // Add 30 minutes for IST
-  int second = utcSecond;
-
-  // Handle minute overflow
-  if (minute >= 60)
-  {
-    minute -= 60;
-    hour += 1;
-  }
-
-  // Handle hour overflow
-  if (hour >= 24)
-  {
-    hour -= 24;
-    day += 1;
-  }
-
-  // Determine the number of days in the current month
-  int daysInMonth;
-  if (month == 1 || month == 3 || month == 5 || month == 7 || month == 8 || month == 10 || month == 12)
-  {
-    daysInMonth = 31;
-  }
-  else if (month == 4 || month == 6 || month == 9 || month == 11)
-  {
-    daysInMonth = 30;
-  }
-  else
-  { // February
-    if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
-    {
-      daysInMonth = 29; // Leap year
-    }
-    else
-    {
-      daysInMonth = 28;
-    }
-  }
-
-  // Handle day overflow
-  if (day > daysInMonth)
-  {
-    day -= daysInMonth;
-    month += 1;
-  }
-
-  // Handle month overflow
-  if (month > 12)
-  {
-    month -= 12;
-    year += 1;
-  }
-
-  // Return the result in a composite integer format
-  return (year * 100) + month;
-}
-
-int convertUtcToIsttime(int utcYear, int utcMonth, int utcDay, int utcHour, int utcMinute, int utcSecond)
-{
-  int year = utcYear;
-  int month = utcMonth;
-  int day = utcDay;
-  int hour = utcHour + 5;      // India is 5 hours ahead of UTC
-  int minute = utcMinute + 30; // Add 30 minutes for IST
-  int second = utcSecond;
-
-  // Handle minute overflow
-  if (minute >= 60)
-  {
-    minute -= 60;
-    hour += 1;
-  }
-
-  // Handle hour overflow
-  if (hour >= 24)
-  {
-    hour -= 24;
-    day += 1;
-  }
-
-  // Determine the number of days in the current month
-  int daysInMonth;
-  if (month == 1 || month == 3 || month == 5 || month == 7 || month == 8 || month == 10 || month == 12)
-  {
-    daysInMonth = 31;
-  }
-  else if (month == 4 || month == 6 || month == 9 || month == 11)
-  {
-    daysInMonth = 30;
-  }
-  else
-  { // February
-    if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
-    {
-      daysInMonth = 29; // Leap year
-    }
-    else
-    {
-      daysInMonth = 28;
-    }
-  }
-
-  // Handle day overflow
-  if (day > daysInMonth)
-  {
-    day -= daysInMonth;
-    month += 1;
-  }
-
-  // Handle month overflow
-  if (month > 12)
-  {
-    month -= 12;
-    year += 1;
-  }
-
-  // Return the result in a composite integer format
-  return (hour * 100) + minute;
-}
-
-int convertUtcToIstday(int utcYear, int utcMonth, int utcDay, int utcHour, int utcMinute, int utcSecond)
-{
-  int year = utcYear;
-  int month = utcMonth;
-  int day = utcDay;
-  int hour = utcHour + 5;      // India is 5 hours ahead of UTC
-  int minute = utcMinute + 30; // Add 30 minutes for IST
-  int second = utcSecond;
-
-  // Handle minute overflow
-  if (minute >= 60)
-  {
-    minute -= 60;
-    hour += 1;
-  }
-
-  // Handle hour overflow
-  if (hour >= 24)
-  {
-    hour -= 24;
-    day += 1;
-  }
-
-  // Determine the number of days in the current month
-  int daysInMonth;
-  if (month == 1 || month == 3 || month == 5 || month == 7 || month == 8 || month == 10 || month == 12)
-  {
-    daysInMonth = 31;
-  }
-  else if (month == 4 || month == 6 || month == 9 || month == 11)
-  {
-    daysInMonth = 30;
-  }
-  else
-  { // February
-    if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
-    {
-      daysInMonth = 29; // Leap year
-    }
-    else
-    {
-      daysInMonth = 28;
-    }
-  }
-
-  // Handle day overflow
-  if (day > daysInMonth)
-  {
-    day -= daysInMonth;
-    month += 1;
-  }
-
-  // Handle month overflow
-  if (month > 12)
-  {
-    month -= 12;
-    year += 1;
-  }
-
-  // Return the result in a composite integer format
-  return day;
+  int y = rtcModule.getYear();
+  int m = rtcModule.getMonth(false);
+  int d = rtcModule.getDate();
+  return (y >= 24 && m >= 1 && m <= 12 && d >= 1 && d <= 31);
 }
 
 // ================================
@@ -480,161 +296,63 @@ void syncRTCFromSystemTime()
   // delay(500);
 }
 
-void syncRTCFromGPS(TinyGPSDate &date, TinyGPSTime &time)
+void syncRTCFromGPS(const TinyGPSDate &date, const TinyGPSTime &time)
 {
-  if (!date.isValid() || !time.isValid())
-    return;
+  int year = date.year() - 2000;
+  int month = date.month();
+  int day = date.day();
 
-  int utcHour = time.hour();
-  int utcMinute = time.minute();
-  int utcSecond = time.second();
-  int utcDay = date.day();
-  int utcMonth = date.month();
-  int utcYear = date.year();
+  int hour = time.hour();
+  int minute = time.minute();
+  int second = time.second();
 
-  int istTime = convertUtcToIsttime(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-  int istDate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-  int istDay = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+  // Convert UTC → IST (+5:30)
+  minute += 30;
+  if (minute >= 60)
+  {
+    minute -= 60;
+    hour++;
+  }
 
-  rtcModule.setYear((istDate / 100) - 2000);
-  rtcModule.setMonth(istDate % 100);
-  rtcModule.setDate(istDay);
-  rtcModule.setHour(istTime / 100);
-  rtcModule.setMinute(istTime % 100);
-  rtcModule.setSecond(utcSecond);
+  hour += 5;
+  if (hour >= 24)
+  {
+    hour -= 24;
+    incrementDate(year, month, day);
+  }
+
+  // Write IST directly to RTC
+  rtcModule.setYear(year);
+  rtcModule.setMonth(month);
+  rtcModule.setDate(day);
+  rtcModule.setHour(hour);
+  rtcModule.setMinute(minute);
+  rtcModule.setSecond(second);
 
   rtcSynced = true;
-  Serial.println("RTC synced from GPS");
 }
 
-// ================================
-// GPS FUNCTIONS
-// ================================
-String getDateFromGPS(TinyGPSDate &date, TinyGPSTime &time)
+void incrementDate(int &y, int &m, int &d)
 {
-  utcHour = time.hour();
-  utcMinute = time.minute();
-  utcSecond = time.second();
-  utcDay = date.day();
-  utcMonth = date.month();
-  utcYear = date.year();
-  Serial.print(utcMonth);
+  static const int daysInMonth[] =
+      {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
-  int istTime = convertUtcToIsttime(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-  int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-  int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
+  int dim = daysInMonth[m - 1];
 
-  int year = istdate / 100;
-  int month = istdate % 100;
-  int day = istday;
-  int hour = istTime / 100;
-  int minute = istTime % 100;
+  if (m == 2 && ((y % 4) == 0))
+    dim = 29;
 
-  // int Hour = Time / 100;
-  // int Minute = Time % 100;
-  int Second = utcSecond;
-  // Month = Month ;
-  // Year = 0;
-  // Month = 0;
-
-  // Call the conversion function with sample data
-  //  convertUtcToIst(2023, 5, 21, 23, 45, 0);
-
-  // Print the result
-  // printf("IST Year: %d, IST Month: %d\n", Year, Month);
-  // int Day = utcDay;
-  // int Month = utcMonth;
-  // int Year = utcYear;
-  // setTime(Hour, Minute, Second, Day, Month, Year);
-  // adjustTime(19800);
-
-  // const int offset = 5;
-
-  String nowDay = "";
-
-  if (Day < 10)
-    nowDay += "0";
-  nowDay += Day;
-  nowDay += "-";
-  if (Month < 10)
-    nowDay += "0";
-  nowDay += Month;
-  nowDay += "-";
-  nowDay += Year;
-  nowDay += " ";
-
-  return nowDay = nowDay;
-
-  // filename =
-  // return dateTimeIf;
-  Serial.println(nowDay);
-  Serial.print("now day =");
-}
-
-String getDateTimeFromGPS(TinyGPSDate &date, TinyGPSTime &time)
-{
-  utcHour = time.hour();
-  utcMinute = time.minute();
-  utcSecond = time.second();
-  utcDay = date.day();
-  utcMonth = date.month();
-  utcYear = date.year();
-  Serial.print(utcMonth);
-  int istTime = convertUtcToIsttime(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-  int istdate = convertUtcToIstdate(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-  int istday = convertUtcToIstday(utcYear, utcMonth, utcDay, utcHour, utcMinute, utcSecond);
-
-  int Year = istdate / 100;
-  int Month = istdate % 100;
-  int Day = istday;
-  int Hour = istTime / 100;
-  int Minute = istTime % 100;
-
-  // int Hour = Time / 100;
-  // int Minute = Time % 100;
-  int Second = utcSecond;
-
-  // Month = Month ;
-  // Year = 0;
-  // Month = 0;
-
-  // Call the conversion function with sample data
-  //  convertUtcToIst(2023, 5, 21, 23, 45, 0);
-
-  // Print the result
-  // printf("IST Year: %d, IST Month: %d\n", Year, Month);
-  // int Day = utcDay;
-  // int Month = utcMonth;
-  // int Year = utcYear;
-  // setTime(Hour, Minute, Second, Day, Month, Year);
-  // adjustTime(19800);
-
-  // const int offset = 5;
-
-  String dateTime = "";
-
-  if (Day < 10)
-    dateTime += "0";
-  dateTime += Day;
-  dateTime += "-";
-  if (Month < 10)
-    dateTime += "0";
-  dateTime += Month;
-  dateTime += "-";
-  dateTime += Year;
-  dateTime += " ";
-  if (Hour < 10)
-    dateTime += "0";
-  dateTime += Hour;
-  dateTime += ":";
-  if (Minute < 10)
-    dateTime += "0";
-  dateTime += Minute;
-  dateTime += ":";
-  if (Second < 10)
-    dateTime += "0";
-  dateTime += Second;
-  return dateTime = dateTime;
+  d++;
+  if (d > dim)
+  {
+    d = 1;
+    m++;
+    if (m > 12)
+    {
+      m = 1;
+      y++;
+    }
+  }
 }
 
 // ================================
@@ -886,11 +604,20 @@ void logDataSdCard()
     return;
   }
   // val4, val5, val6, c_300 , c_500, c_1000, c_2500, c_5000, c_10000, pms_temp, pms_h;
-  String dataMessage = dateTime + "," + String(temperature) + "," + String(humidity) + "," + String(pressure) + "," + String(gas) + "," + String(altitudeBme) + "," +
-                       String(val1) + "," + String(val2) + "," + String(val3) + "," + String(val4) + "," + String(val5) + "," + String(val6) + "," + String(c_300) + "," + String(c_500) + "," + String(c_1000) + "," +
-                       String(c_2500) + "," + String(c_5000) + "," + String(c_10000) + "," + String(pms_temp) + "," + String(pms_h) + "," + String(pms_fld) + "," +
-                       String(lati) + "," + String(longi) + "," + atlt + "," + noS + "\r\n";
-
+  char dataMessage[1024];
+  snprintf(dataMessage, sizeof(dataMessage),
+           "%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%s,%s,%s,%s\r\n",
+           dateTime.c_str(),
+           temperature,
+           humidity,
+           pressure,
+           gas,
+           altitudeBme,
+           (float)val1, (float)val2, (float)val3, (float)val4, (float)val5, (float)val6,
+           (float)c_300, (float)c_500, (float)c_1000, (float)c_2500, (float)c_5000, (float)c_10000,
+           (float)pms_temp, (float)pms_h, (float)pms_fld,
+           lati.c_str(), longi.c_str(),
+           atlt.c_str(), noS.c_str());
   if (file.print(dataMessage))
   {
     Serial.print("Data saved to SD card: ");
@@ -1024,6 +751,11 @@ void setup()
       ;
   }
 
+  if (isRTCValid())
+  {
+    rtcSynced = true;
+  }
+
   // NTP Time
   display.clearDisplay();
   display.setTextColor(WHITE);
@@ -1047,12 +779,12 @@ void setup()
   }
 
   unsigned long startAttempt = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000)
+  while (!rtcSynced && WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000)
   {
     delay(500);
   }
 
-  if (WiFi.status() == WL_CONNECTED)
+  if (!rtcSynced && WiFi.status() == WL_CONNECTED)
   {
     Serial.println("WiFi connected");
     display.clearDisplay();
@@ -1197,9 +929,9 @@ void loop()
 
   static unsigned long lastNtpSync = 0;
 
-  if (WiFi.status() == WL_CONNECTED && millis() - lastNtpSync > 6UL * 60 * 60 * 1000)
+  if (!rtcSynced && WiFi.status() == WL_CONNECTED && millis() - lastNtpSync > 6UL * 60 * 60 * 1000)
   {
-    if (syncTimeFromNTP())
+    if (!rtcSynced && syncTimeFromNTP())
     {
       syncRTCFromSystemTime();
       lastNtpSync = millis();
@@ -1282,9 +1014,9 @@ void loop()
       // Serial.println(nowDay);
       // Serial.println(nowDay);
       // String x = strtok(dateTime," ").tostr();
-      Date = getDateFromGPS(gps.date, gps.time);
+      Date = getRTCDate();
       // String dateTime = "";
-      dateTime = getDateTimeFromGPS(gps.date, gps.time);
+      dateTime = getRTCDateTime();
       // Date =  x[0];
       Serial.println("1");
       Serial.println(Date);
