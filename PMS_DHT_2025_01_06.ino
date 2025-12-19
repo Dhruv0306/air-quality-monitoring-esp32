@@ -83,8 +83,12 @@ bool wifiConnected = false; // Global variable to track WiFi connection status
 bool rtcSynced = false;
 bool ntpSynced = false;
 bool wifiConfigured = false;
+WiFiManager wm;
 time_t lastNtpSyncEpoch = 0;
 String lastFileDate = "";
+unsigned long lastWiFiAttempt = 0;
+const unsigned long WIFI_RETRY_INTERVAL = 30000; // 30 seconds
+bool ntpSyncedThisSession = false;
 
 // ================================
 // HARDWARE OBJECTS
@@ -148,10 +152,11 @@ bool syncTimeFromNTP()
 
 bool setupWiFiFirstTime()
 {
-  WiFiManager wm;
 
   wm.setConfigPortalTimeout(120); // 2 minutes
-  wm.setBreakAfterConfig(true);
+  wm.setConnectTimeout(5);
+  wm.setDebugOutput(true);
+  // wm.setBreakAfterConfig(true);
 
   if (!wm.autoConnect("ESP32-Time-Setup"))
   {
@@ -551,6 +556,7 @@ void setup()
   Wire.begin();
   Wire.setClock(400000); // Set I2C frequency to 400kHz
   // rtcModule.begin();
+  WiFi.mode(WIFI_STA); // <-- REQUIRED
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
   {
     Serial.println(F("SSD1306 allocation failed"));
@@ -664,6 +670,48 @@ void setup()
 // ================================
 // NTP PERIODIC SYNC FUNCTION
 // ================================
+void maintainWiFi()
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    if (!wifiConnected)
+    {
+      Serial.println("WiFi connected");
+      wifiConnected = true;
+      ntpSyncedThisSession = false; // allow NTP sync again
+    }
+
+    // Sync NTP once per connection
+    if (!ntpSyncedThisSession)
+    {
+      if (syncTimeFromNTP())
+      {
+        syncRTCFromSystemTime();
+        ntpSyncedThisSession = true;
+        ntpSynced = true;
+      }
+    }
+    return;
+  }
+
+  // ---- WiFi NOT connected ----
+  wifiConnected = false;
+
+  if (millis() - lastWiFiAttempt < WIFI_RETRY_INTERVAL)
+    return;
+
+  lastWiFiAttempt = millis();
+
+  if (WiFi.status() == WL_NO_SSID_AVAIL)
+  {
+    Serial.println("No WiFi credentials stored");
+    return;
+  }
+
+  Serial.println("Attempting WiFi reconnect...");
+  WiFi.begin(); // non-blocking
+}
+
 void periodicNtpSync()
 {
   static unsigned long lastCheck = 0;
@@ -701,7 +749,7 @@ void loop()
 
   // delay(20);
   // String datetime = "";
-
+  maintainWiFi();
   periodicNtpSync();
 
   // GPS not available, use RTC as fallback
