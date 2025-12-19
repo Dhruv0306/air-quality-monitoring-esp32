@@ -618,11 +618,13 @@ void logDataSdCard()
 
   String date = "";
 
-  // Format date as YYYYMMDD for filename
+  // Format date as YYYY-MM-DD for filename
   date += (2000 + rtcYear);
+  date += "-";
   if (rtcMonth < 10)
     date += "0";
   date += rtcMonth;
+  date += "-";
   if (rtcDay < 10)
     date += "0";
   date += rtcDay;
@@ -980,8 +982,13 @@ void loop()
     lastAqiDisplayUpdate = millis();
   }
 
-  // Log all sensor data to SD card
-  logDataSdCard();
+  // Log all sensor data to SD card every 10 seconds
+  static unsigned long lastSDLog = 0;
+  if (millis() - lastSDLog >= 10000) // Log every 10 seconds
+  {
+    logDataSdCard();
+    lastSDLog = millis();
+  }
 
   // Debug output
   Serial.println("Data cycle completed - Time: " + dateTime);

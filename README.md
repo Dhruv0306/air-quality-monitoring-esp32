@@ -248,7 +248,7 @@ pms_temp,pms_humidity,pms_formaldihyde,Latitude,Longitude,Altitude_GPS,Satellite
 │ 8. getRTCDateTime() → Current Timestamp                    │
 │ 9. updateDisplay() → OLED Every 3 seconds                  │
 │ 10. updateAQIDisplay() → OLED Every 5 seconds              │
-│ 11. logDataSdCard() → Append to CSV File                   │
+│ 11. logDataSdCard() → Append to CSV File Every 10 seconds  │
 └─────────────────────────┬───────────────────────────────────┘
                           │
                           └─── Loop Continues
