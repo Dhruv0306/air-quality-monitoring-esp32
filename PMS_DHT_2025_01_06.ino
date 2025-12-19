@@ -583,7 +583,6 @@ void setup()
         rtcModule.getDate(),
         rtcModule.getMonth(centuryFlag),
         2000 + rtcModule.getYear());
-
     rtcSynced = true;
     lastNtpSyncEpoch = now();
     Serial.println("RTC time loaded");
@@ -736,12 +735,18 @@ void loop()
   dateTime = getRTCDateTime();
   Date = getRTCDate();
 
-  updateDisplay("Using RTC Time");
+  static unsigned long lastDisplayUpdate = 0;
+  if (millis() - lastDisplayUpdate >= 3000)
+  {
+    updateDisplay("Using RTC Time");
+    lastDisplayUpdate = millis();
+  }
 
-  rem = i % 5;
-  if (rem == 0)
+  static unsigned long lastAqiDisplayUpdate = 0;
+  if (millis() - lastAqiDisplayUpdate >= 5000)
   {
     updateAQIDisplay();
+    lastAqiDisplayUpdate = millis();
   }
 
   logDataSdCard();
