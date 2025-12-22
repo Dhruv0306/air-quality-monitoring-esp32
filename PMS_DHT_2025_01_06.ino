@@ -930,7 +930,10 @@ void loop()
   // Maintain WiFi connection and perform periodic NTP sync
   maintainWiFi();
   periodicNtpSync();
-
+  static unsigned long lastMainLoopAttempt = 0;
+  if (millis() - lastMainLoopAttempt < 1000)
+    return;
+  lastMainLoopAttempt = millis();
   // Set fixed GPS coordinates (GPS module not available)
   // Location: Ahmedabad, Gujarat, India
   latitude = 23.038126;

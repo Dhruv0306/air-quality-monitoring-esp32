@@ -22,3 +22,8 @@ Thumbs.db
 # Credentials (if any config files contain sensitive data)
 config.h
 secrets.h
+
+server/.venv/
+server/.env
+server/__pycache__/
+server/data/
