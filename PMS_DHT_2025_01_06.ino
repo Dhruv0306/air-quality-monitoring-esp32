@@ -40,6 +40,7 @@
 // ================================
 #define INFLUXDB_BUCKET "E_010" // Device ID CHange her e.g. JDH_IITJ # ACRL_014
 #define S1 "AU_PMS_CAPSTONE_"   // Device ID CHange here
+#define S0 "O_015"
 // #define INFLUXDB_MEASUREMENT "atmosphere_data"
 // #define WIFI_CONNECT_TIMEOUT 60000 // 1 minute
 // #define TZ_INFO "IST-5:30"
@@ -562,7 +563,7 @@ void checkFileExists()
   date += rtcDay;
 
   // Create filename with device ID prefix
-  filename = String(S1) + String(date) + ".csv";
+  filename = String(S0) + "_" + String(S1) + String(date) + ".csv";
 
   // Debug: Print current date components
   Serial.println("Current date: " + String(rtcDay) + "/" + String(rtcMonth) + "/" + String(2000 + rtcYear));
@@ -630,7 +631,7 @@ void logDataSdCard()
   date += rtcDay;
 
   // Generate filename and open for append
-  filename = String(S1) + String(date) + ".csv";
+  filename = String(S0) + "_" + String(S1) + String(date) + ".csv";
   File file = SD.open("/" + filename, "a+"); // Append mode
   if (!file)
   {
