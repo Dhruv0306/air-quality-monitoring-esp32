@@ -98,6 +98,7 @@ bool wifiConnected = false;                      // Tracks current WiFi connecti
 bool rtcSynced = false;                          // True when RTC has valid time
 bool ntpSynced = false;                          // True when NTP sync was successful
 bool wifiConfigured = false;                     // True when WiFi credentials are saved
+bool bmeAvailable = false;                       // True if BME680 sensor is connected
 WiFiManager wm;                                  // Handles WiFi setup portal
 time_t lastNtpSyncEpoch = 0;                     // When last NTP sync occurred
 String lastFileDate = "";                        // Tracks current day for file creation
@@ -387,9 +388,19 @@ void readSensors()
 
   // Set BME680 values to 9999 when sensor not available
   // These values indicate "no data" in the CSV output
-  pressure = 9999;
-  gas = 9999;
-  altitudeBme = 9999;
+  // ---- BME680 ----
+  if (bmeAvailable && bme.performReading())
+  {
+    pressure = bme.pressure / 100.0;   // Convert Pa → hPa
+    gas = bme.gas_resistance / 1000.0; // Ohms → kOhms
+    altitudeBme = bme.readAltitude(SEALEVELPRESSURE_HPA);
+  }
+  else
+  {
+    pressure = 9999;
+    gas = 9999;
+    altitudeBme = 9999;
+  }
 }
 
 /**
@@ -812,6 +823,7 @@ void setup()
   if (!bme.begin())
   {
     Serial.println("BME680 sensor not found - using DHT22 only");
+    bmeAvailable = false;
 
     // Print DHT22 sensor details for debugging
     sensor_t sensor;
@@ -857,6 +869,7 @@ void setup()
   }
   else
   {
+    bmeAvailable = true;
     // Configure BME680 if available
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
@@ -886,9 +899,10 @@ void setup()
 /**
  * WIFI MANAGEMENT: Keep WiFi connected and sync time when possible
  * Monitors WiFi status and attempts reconnection if disconnected
- * Performs NTP time sync once per WiFi connection session
- * Throttles reconnection attempts to avoid spam (30 second intervals)
- * Called continuously from main loop
+ * Performs NTP time sync once per WiFi connection session (prevents spam)
+ * Throttles reconnection attempts to avoid network spam (30 second intervals)
+ * Updates global status flags: wifiConnected, ntpSyncedThisSession
+ * Called continuously from main loop for robust network management
  */
 void maintainWiFi()
 {
@@ -984,15 +998,16 @@ void periodicNtpSync()
 // MAIN LOOP
 // ================================
 /**
- * MAIN PROGRAM: Continuous operation loop
+ * MAIN PROGRAM: Continuous operation loop with enhanced timing control
  * This function runs forever after setup() completes
- * Manages all ongoing tasks:
- * - Maintain WiFi connection and time sync
- * - Read sensors every few seconds
- * - Update display alternately (sensor data / AQI info)
- * - Log data to SD card every 10 seconds
- * - Create new daily files when date changes
- * Uses timing controls to prevent overwhelming the system
+ * Manages all ongoing tasks with non-blocking millis() timing:
+ * - Maintain WiFi connection and perform periodic NTP sync
+ * - Read sensors at optimal intervals (PMS every 2s, others as needed)
+ * - Update display alternately (sensor data every 3s / AQI info every 5s)
+ * - Log comprehensive data to SD card every 10 seconds
+ * - Create new daily CSV files when date changes
+ * - Throttle main loop to 1 second intervals for system stability
+ * Uses advanced timing controls to prevent system overload
  */
 void loop()
 {

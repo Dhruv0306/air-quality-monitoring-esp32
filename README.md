@@ -47,20 +47,27 @@ I2C Devices (DS3231 RTC, BME680, OLED):
 ### Arduino Libraries (Install via Library Manager)
 ```cpp
 // Core sensor libraries
-#include <PMS5003.h>          // Air quality sensor
+#include <PMS5003.h>          // Air quality sensor (GuL::PMS5003)
 #include <DHT.h>              // Temperature/humidity sensor
 #include <DHT_U.h>            // DHT unified sensor library
 #include <DS3231.h>           // Real-time clock module
+#include <Adafruit_Sensor.h>  // Unified sensor library
 
 // Display and storage
 #include <Adafruit_SSD1306.h> // OLED display
+#include <Adafruit_GFX.h>     // Graphics library for display
 #include <Adafruit_BME680.h>  // Optional environmental sensor
 #include <SD.h>               // SD card storage
+#include <SPI.h>              // SPI communication
+#include "FS.h"               // File system
 
 // Networking and time
 #include <WiFi.h>             // ESP32 WiFi
-#include <WiFiManager.h>      // Easy WiFi setup
+#include <WiFiManager.h>      // Easy WiFi setup with portal
 #include <TimeLib.h>          // Time management
+#include <time.h>             // System time functions
+#include <Wire.h>             // I2C communication
+#include <HardwareSerial.h>   // Serial communication
 ```
 
 **Installation Steps**:
@@ -513,9 +520,11 @@ This project is open source. Modify and distribute as needed for educational and
 
 ### Default Credentials
 - **WiFi Hotspot**: "[S0] ESP32-Time-Setup" (no password, e.g., "AGCP_009 ESP32-Time-Setup")
-- **Configuration Portal**: 192.168.4.1
+- **Configuration Portal**: 192.168.4.1 (2-minute timeout)
 - **Serial Monitor**: 9600 baud
 - **I2C Address**: 0x3C (OLED display)
+- **I2C Speed**: 400kHz (high-speed mode)
+- **PMS5003**: Serial2 (9600 baud, passive mode)
 
 ### File Naming Convention
 - **Format**: `[S0]_[S1]YYYY-MM-DD.csv`
