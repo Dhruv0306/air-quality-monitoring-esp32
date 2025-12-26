@@ -49,7 +49,7 @@
 // ================================
 #define INFLUXDB_BUCKET "E_010" // CHANGE THIS: Unique device bucket ID (e.g. JDH_IITJ, ACRL_014)
 #define S1 "AU_PMS_CAPSTONE_"   // CHANGE THIS: Device ID prefix for file naming
-#define S0 "O_015" // CHANGE THIS: Short device name for CSV files
+#define S0 "AGCP_009"           // CHANGE THIS: Short device name for CSV files
 // #define INFLUXDB_MEASUREMENT "atmosphere_data"
 // #define WIFI_CONNECT_TIMEOUT 60000 // 1 minute
 // #define TZ_INFO "IST-5:30"
@@ -94,16 +94,16 @@ int d, m, y, h, mm;
 String dataMessage, lati, longi, atlt, noS, dateTime, dateTimeIf, aqi, filename, nowDay, olddate, f;
 
 // WiFi and Time Management Variables
-bool wifiConnected = false;        // Tracks current WiFi connection status
-bool rtcSynced = false;           // True when RTC has valid time
-bool ntpSynced = false;           // True when NTP sync was successful
-bool wifiConfigured = false;      // True when WiFi credentials are saved
-WiFiManager wm;                   // Handles WiFi setup portal
-time_t lastNtpSyncEpoch = 0;      // When last NTP sync occurred
-String lastFileDate = "";         // Tracks current day for file creation
-unsigned long lastWiFiAttempt = 0; // Prevents WiFi spam attempts
+bool wifiConnected = false;                      // Tracks current WiFi connection status
+bool rtcSynced = false;                          // True when RTC has valid time
+bool ntpSynced = false;                          // True when NTP sync was successful
+bool wifiConfigured = false;                     // True when WiFi credentials are saved
+WiFiManager wm;                                  // Handles WiFi setup portal
+time_t lastNtpSyncEpoch = 0;                     // When last NTP sync occurred
+String lastFileDate = "";                        // Tracks current day for file creation
+unsigned long lastWiFiAttempt = 0;               // Prevents WiFi spam attempts
 const unsigned long WIFI_RETRY_INTERVAL = 30000; // Wait 30 seconds between WiFi retries
-bool ntpSyncedThisSession = false; // Prevents multiple NTP syncs per connection
+bool ntpSyncedThisSession = false;               // Prevents multiple NTP syncs per connection
 
 // ================================
 // HARDWARE OBJECTS
@@ -216,7 +216,8 @@ bool setupWiFiFirstTime()
   wm.setDebugOutput(true);
 
   // Create WiFi hotspot "ESP32-Time-Setup" for configuration
-  if (!wm.autoConnect("ESP32-Time-Setup"))
+  String S_name = String(S0) + " " + "ESP32-Time-Setup";
+  if (!wm.autoConnect(S_name.c_str()))
   {
     Serial.println("WiFi setup skipped or failed");
     return false;
@@ -520,7 +521,7 @@ void updateDisplay(String messge)
   display.setCursor(0, 0);
 
   // Display status message (e.g., "Using RTC Time")
-  display.println(messge);
+  display.println(S0);
 
   // Display environmental readings
   display.print("Temperature: ");

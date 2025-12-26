@@ -73,9 +73,9 @@ I2C Devices (DS3231 RTC, BME680, OLED):
 
 ### Device Identification (MUST CHANGE)
 ```cpp
-#define S1 "AU_PMS_CAPSTONE_"  // CHANGE THIS: Device ID prefix for file naming
-#define INFLUXDB_BUCKET "E_010"  // CHANGE THIS: Unique device bucket ID
-#define S0 "O_015"              // CHANGE THIS: Short device name for CSV files
+#define INFLUXDB_BUCKET "E_010" // CHANGE THIS: Unique device bucket ID (e.g. JDH_IITJ, ACRL_014)
+#define S1 "AU_PMS_CAPSTONE_"   // CHANGE THIS: Device ID prefix for file naming
+#define S0 "AGCP_009"           // CHANGE THIS: Short device name for CSV files
 ```
 **Important**: Update these values for each device deployment to ensure unique identification.
 
@@ -123,7 +123,7 @@ I2C Devices (DS3231 RTC, BME680, OLED):
 - Device will display "First boot detected" if no WiFi credentials stored
 
 ### Step 2: WiFi Configuration
-1. Device creates hotspot "ESP32-Time-Setup" (no password)
+1. Device creates hotspot "[S0] ESP32-Time-Setup" (no password, e.g., "AGCP_009 ESP32-Time-Setup")
 2. Connect your phone/computer to this hotspot
 3. Browser should auto-open configuration page, or navigate to `192.168.4.1`
 4. Select your WiFi network and enter password
@@ -156,7 +156,7 @@ I2C Devices (DS3231 RTC, BME680, OLED):
 - **Display**: Live data on OLED screen with alternating views
 
 ### File Management
-- Daily CSV files named: `AU_PMS_CAPSTONE_YYYY-MM-DD.csv`
+- Daily CSV files named: `[S0]_[S1]YYYY-MM-DD.csv`
 - Files created automatically based on RTC date
 - Continuous data logging throughout operation
 
@@ -313,7 +313,7 @@ pms_temp,pms_humidity,pms_formaldihyde,Latitude,Longitude,Altitude_GPS,Satellite
        ▼
 ┌─────────────────────────────────────┐
 │ Create New CSV File:                │
-│ AU_PMS_CAPSTONE_YYYY-MM-DD.csv      │
+│ [S0]_[S1]YYYY-MM-DD.csv             │
 │ With Headers                        │
 └─────────────────┬───────────────────┘
                   │
@@ -388,12 +388,13 @@ pms_temp,pms_humidity,pms_formaldihyde,Latitude,Longitude,Altitude_GPS,Satellite
 │                                                     │
 │ MODE 1 (Every 3s): SENSOR READINGS                 │
 │ ┌─────────────────────────────────────────────────┐ │
-│ │ Using RTC Time                                  │ │
-│ │ Temperature: 23.5 °C                           │ │
+│ │ AGCP_009                                        │ │
+│ │ Temperature: 23.5 *C                           │ │
 │ │ Humidity: 65.2 %                               │ │
-│ │ PM1: 12.3 μg/m³                                │ │
-│ │ PM2.5: 25.7 μg/m³                              │ │
-│ │ PM10: 35.1 μg/m³                               │ │
+│ │ Pressure: 9999 hPa                             │ │
+│ │ PM1: 12.3 ug/m^3                               │ │
+│ │ PM2.5: 25.7 ug/m^3                             │ │
+│ │ PM10: 35.1 ug/m^3                              │ │
 │ └─────────────────────────────────────────────────┘ │
 │                                                     │
 │ MODE 2 (Every 5s): AIR QUALITY INDEX               │
@@ -505,20 +506,20 @@ This project is open source. Modify and distribute as needed for educational and
 ### Critical Configuration
 ```cpp
 // CHANGE THESE FOR EACH DEVICE:
-#define S0 "O_015"              // Short device name
-#define S1 "AU_PMS_CAPSTONE_"   // Device ID prefix  
-#define INFLUXDB_BUCKET "E_010" // Unique bucket ID
+#define INFLUXDB_BUCKET "E_010" // Unique device bucket ID
+#define S1 "AU_PMS_CAPSTONE_"   // Device ID prefix
+#define S0 "AGCP_009"           // Short device name
 ```
 
 ### Default Credentials
-- **WiFi Hotspot**: "ESP32-Time-Setup" (no password)
+- **WiFi Hotspot**: "[S0] ESP32-Time-Setup" (no password, e.g., "AGCP_009 ESP32-Time-Setup")
 - **Configuration Portal**: 192.168.4.1
 - **Serial Monitor**: 9600 baud
 - **I2C Address**: 0x3C (OLED display)
 
 ### File Naming Convention
 - **Format**: `[S0]_[S1]YYYY-MM-DD.csv`
-- **Example**: `O_015_AU_PMS_CAPSTONE_2025-01-25.csv`
+- **Example**: `AGCP_009_AU_PMS_CAPSTONE_2025-01-25.csv`
 - **Location**: Root directory of SD card
 - **Headers**: Auto-added to new files
 
