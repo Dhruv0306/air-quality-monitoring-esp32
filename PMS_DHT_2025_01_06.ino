@@ -531,9 +531,9 @@ void updateDisplay(String messge)
   display.println(" %");
 
   // BME680 readings commented out (sensor not available)
-  // display.print("Pressure: ");
-  // display.print(pressure);
-  // display.println(" hPa");
+  display.print("Pressure: ");
+  display.print(pressure);
+  display.println(" hPa");
 
   // Display PM concentrations (atmospheric conditions)
   display.print("PM1: ");

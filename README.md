@@ -256,12 +256,13 @@ pms_temp,pms_humidity,pms_formaldihyde,Latitude,Longitude,Altitude_GPS,Satellite
 ┌─────────────────────────────────────────────────────────────┐
 │ TIMED OPERATIONS (Non-blocking with millis() timing)       │
 │                                                             │
-│ Every 1s:  WiFi maintenance + GPS coordinates              │
+│ Every 1s:  Main loop throttling + WiFi maintenance        │
 │ Every 2s:  Read PMS5003 air quality sensor                │
 │ Every 3s:  Update OLED with sensor readings               │
 │ Every 5s:  Update OLED with AQI display (alternating)     │
 │ Every 10s: Log all data to SD card CSV file               │
-│ Every 24h: Automatic NTP time sync (if WiFi connected)    │
+│ Every 30s: WiFi reconnection attempts (if disconnected)   │
+│ Every 60s: Check for periodic NTP sync (24h intervals)    │
 │ Daily:     Create new CSV file when date changes          │
 └─────────────────────────┬───────────────────────────────────┘
                           │
@@ -277,17 +278,20 @@ pms_temp,pms_humidity,pms_formaldihyde,Latitude,Longitude,Altitude_GPS,Satellite
        │                  │                  │
        ▼                  ▼                  ▼
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Create WiFi │    │ Auto Connect│    │ Monitor     │
-│ Hotspot:    │    │ to Saved    │    │ Connection  │
-│"ESP32-Setup"│    │ Network     │    │ Status      │
-│192.168.4.1  │    │             │    │             │
+│ Create WiFi │    │ Auto Connect│    │ Smart WiFi  │
+│ Hotspot:    │    │ to Saved    │    │ Management  │
+│"ESP32-Setup"│    │ Network     │    │ • 30s retry │
+│192.168.4.1  │    │             │    │ • Session   │
+│             │    │             │    │   tracking  │
 └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
        │                  │                  │
        ▼                  ▼                  ▼
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ User Setup  │    │ Check RTC   │    │ Auto NTP    │
-│ → NTP Sync  │    │ → NTP Sync  │    │ Sync Every  │
-│ → Save RTC  │    │ → Save RTC  │    │ 24 Hours    │
+│ User Setup  │    │ Check RTC   │    │ Enhanced    │
+│ → NTP Sync  │    │ → NTP Sync  │    │ NTP Sync:   │
+│ → Save RTC  │    │ → Save RTC  │    │ • Once per  │
+│             │    │             │    │   session   │
+│             │    │             │    │ • 24h check │
 └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
        │                  │                  │
        └──────────────────┼──────────────────┘
@@ -439,27 +443,38 @@ The code is organized into clear functional sections with comprehensive comments
 - `updateAQIDisplay()`: Show air quality status
 
 #### NETWORK OPERATIONS
-- `setupWiFiFirstTime()`: Create configuration portal
-- `maintainWiFi()`: Keep connection alive and sync time
-- `periodicNtpSync()`: Daily time corrections
+- `setupWiFiFirstTime()`: Create configuration portal with timeout
+- `maintainWiFi()`: Smart WiFi management with session tracking
+- `periodicNtpSync()`: Automatic 24-hour NTP sync with validation
 
 ### Timing Strategy
-The system uses non-blocking timing with `millis()` to handle multiple tasks:
+The system uses advanced non-blocking timing with `millis()` to handle multiple tasks efficiently:
 
 ```cpp
-// Example timing pattern used throughout the code
+// Enhanced timing pattern with session management
 static unsigned long lastAction = 0;
 if (millis() - lastAction >= INTERVAL) {
     performAction();
     lastAction = millis();
 }
+
+// WiFi retry throttling (30 seconds)
+const unsigned long WIFI_RETRY_INTERVAL = 30000;
+if (millis() - lastWiFiAttempt < WIFI_RETRY_INTERVAL)
+    return;
+
+// Main loop throttling (1 second)
+static unsigned long lastMainLoopAttempt = 0;
+if (millis() - lastMainLoopAttempt < 1000)
+    return;
 ```
 
 ### Error Handling
-- **WiFi Failures**: System continues with RTC time
-- **Sensor Errors**: Invalid readings logged as error values
-- **SD Card Issues**: Errors logged to Serial Monitor
-- **RTC Problems**: Falls back to system time when possible
+- **WiFi Failures**: System continues with RTC time, automatic reconnection every 30 seconds
+- **Sensor Errors**: Invalid readings logged as error values (9999 for missing sensors)
+- **SD Card Issues**: Errors logged to Serial Monitor with detailed messages
+- **RTC Problems**: Falls back to system time when possible, validates time ranges
+- **NTP Sync**: Session-based sync prevents multiple attempts, 24-hour periodic updates
 
 ### Customization Points
 1. **Device Identity**: Update S0, S1, INFLUXDB_BUCKET defines
