@@ -1,6 +1,13 @@
 // ================================
-// LIBRARY INCLUDES
+// REQUIRED LIBRARIES
 // ================================
+// Install these libraries through Arduino IDE Library Manager:
+// - PMS5003 (for air quality sensor)
+// - Adafruit BME680, SSD1306, Sensor libraries
+// - DHT sensor library
+// - DS3231 (RTC module)
+// - WiFiManager (for easy WiFi setup)
+// - TimeLib (for time management)
 #include <PMS5003.h>
 #include <HardwareSerial.h>
 #include <Wire.h>
@@ -20,8 +27,10 @@
 #include <DHT_U.h>
 
 // ================================
-// HARDWARE DEFINITIONS
+// HARDWARE PIN DEFINITIONS
 // ================================
+// Define which GPIO pins connect to which sensors/modules
+// Change these if you wire components to different pins
 #define BME_SCK 13
 #define BME_MISO 12
 #define BME_MOSI 11
@@ -38,16 +47,18 @@
 // ================================
 // DEVICE CONFIGURATION
 // ================================
-#define INFLUXDB_BUCKET "E_010" // Device ID CHange her e.g. JDH_IITJ # ACRL_014
-#define S1 "AU_PMS_CAPSTONE_"   // Device ID CHange here
-#define S0 "O_015"
+#define INFLUXDB_BUCKET "E_010" // CHANGE THIS: Unique device bucket ID (e.g. JDH_IITJ, ACRL_014)
+#define S1 "AU_PMS_CAPSTONE_"   // CHANGE THIS: Device ID prefix for file naming
+#define S0 "O_015" // CHANGE THIS: Short device name for CSV files
 // #define INFLUXDB_MEASUREMENT "atmosphere_data"
 // #define WIFI_CONNECT_TIMEOUT 60000 // 1 minute
 // #define TZ_INFO "IST-5:30"
 
 // ================================
-// NTP CONFIGURATION
+// NETWORK TIME PROTOCOL (NTP) SETUP
 // ================================
+// NTP automatically syncs time from internet when WiFi is available
+// Adjust GMT_OFFSET_SEC for your timezone (19800 = IST/India +5:30)
 #define NTP_SERVER "pool.ntp.org"
 #define GMT_OFFSET_SEC 19800 // IST = UTC + 5:30
 #define DAYLIGHT_OFFSET_SEC 0
@@ -62,6 +73,8 @@
 // ================================
 // GLOBAL VARIABLES
 // ================================
+// These variables store sensor readings, time data, and system status
+// Most are updated continuously in the main loop
 String Date;
 float rem = 0;
 int i = 0;
@@ -80,20 +93,23 @@ int d, m, y, h, mm;
 
 String dataMessage, lati, longi, atlt, noS, dateTime, dateTimeIf, aqi, filename, nowDay, olddate, f;
 
-bool wifiConnected = false; // Global variable to track WiFi connection status
-bool rtcSynced = false;
-bool ntpSynced = false;
-bool wifiConfigured = false;
-WiFiManager wm;
-time_t lastNtpSyncEpoch = 0;
-String lastFileDate = "";
-unsigned long lastWiFiAttempt = 0;
-const unsigned long WIFI_RETRY_INTERVAL = 30000; // 30 seconds
-bool ntpSyncedThisSession = false;
+// WiFi and Time Management Variables
+bool wifiConnected = false;        // Tracks current WiFi connection status
+bool rtcSynced = false;           // True when RTC has valid time
+bool ntpSynced = false;           // True when NTP sync was successful
+bool wifiConfigured = false;      // True when WiFi credentials are saved
+WiFiManager wm;                   // Handles WiFi setup portal
+time_t lastNtpSyncEpoch = 0;      // When last NTP sync occurred
+String lastFileDate = "";         // Tracks current day for file creation
+unsigned long lastWiFiAttempt = 0; // Prevents WiFi spam attempts
+const unsigned long WIFI_RETRY_INTERVAL = 30000; // Wait 30 seconds between WiFi retries
+bool ntpSyncedThisSession = false; // Prevents multiple NTP syncs per connection
 
 // ================================
 // HARDWARE OBJECTS
 // ================================
+// These objects represent physical sensors and modules
+// They provide methods to read data and control hardware
 Adafruit_BME680 bme; // I2C
 GuL::PMS5003 pms(Serial2);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -105,10 +121,11 @@ DS3231 rtcModule;
 // ================================
 
 /**
- * Calculate number of days in a given month and year
- * @param m Month (1-12)
- * @param y Year
- * @return Number of days in the month
+ * UTILITY: Calculate how many days are in a specific month
+ * Handles leap years correctly for February
+ * @param m Month (1=January, 2=February, ..., 12=December)
+ * @param y Full year (e.g., 2025)
+ * @return Number of days (28, 29, 30, or 31)
  */
 int daysInMonth(int m, int y)
 {
@@ -123,9 +140,11 @@ int daysInMonth(int m, int y)
 }
 
 /**
- * Check if a year is a leap year
- * @param y Year to check
- * @return true if leap year, false otherwise
+ * UTILITY: Determine if a year is a leap year
+ * Leap years have 366 days (February has 29 days instead of 28)
+ * Rules: Divisible by 4, except century years must be divisible by 400
+ * @param y Full year to check (e.g., 2024)
+ * @return true if leap year, false if regular year
  */
 bool isLeapYear(int y)
 {
@@ -142,9 +161,11 @@ bool isLeapYear(int y)
 }
 
 /**
- * Synchronize system time with NTP server
- * Configures timezone and attempts to get current time from NTP
- * @return true if sync successful, false otherwise
+ * TIME SYNC: Get accurate time from internet (NTP server)
+ * This function connects to a time server and updates the ESP32's internal clock
+ * Only works when WiFi is connected to internet
+ * Automatically adjusts for Indian Standard Time (IST = UTC+5:30)
+ * @return true if time was successfully retrieved, false if failed
  */
 bool syncTimeFromNTP()
 {
@@ -179,9 +200,11 @@ bool syncTimeFromNTP()
 }
 
 /**
- * Setup WiFi connection for first-time boot
- * Creates configuration portal for user to enter WiFi credentials
- * @return true if WiFi configured successfully, false otherwise
+ * FIRST BOOT: Create WiFi setup portal for new devices
+ * When device has no saved WiFi credentials, it creates a hotspot called "ESP32-Time-Setup"
+ * Users connect to this hotspot and enter their WiFi network details through a web page
+ * After setup, device will automatically connect to the saved network on future boots
+ * @return true if user successfully configured WiFi, false if setup was skipped/failed
  */
 bool setupWiFiFirstTime()
 {
@@ -204,9 +227,11 @@ bool setupWiFiFirstTime()
 }
 
 /**
- * Validate if RTC has reasonable time values
- * Checks if year is >= 2024 and date/time values are within valid ranges
- * @return true if RTC time appears valid, false otherwise
+ * RTC VALIDATION: Check if the Real-Time Clock has sensible time
+ * The RTC module keeps time even when ESP32 is powered off (has backup battery)
+ * This function verifies the stored time isn't corrupted or uninitialized
+ * Checks: Year >= 2024, month 1-12, day 1-31, hour 0-23
+ * @return true if RTC time looks correct, false if time seems invalid
  */
 bool isRTCValid()
 {
@@ -228,9 +253,11 @@ bool isRTCValid()
 // ================================
 
 /**
- * Get formatted date and time string from RTC
- * Format: DD-MM-YYYY HH:MM:SS
- * @return Formatted datetime string
+ * RTC READ: Get current date and time as formatted string
+ * Reads the current time from RTC module and formats it for display/logging
+ * Format: DD-MM-YYYY HH:MM:SS (e.g., "25-01-2025 14:30:15")
+ * Automatically adds leading zeros for single-digit values
+ * @return Complete date-time string ready for CSV files or display
  */
 String getRTCDateTime()
 {
@@ -274,9 +301,10 @@ String getRTCDateTime()
 }
 
 /**
- * Get formatted date string from RTC
- * Format: DD-MM-YYYY (with trailing space)
- * @return Formatted date string
+ * RTC READ: Get current date only (no time)
+ * Used for creating daily CSV files and checking if day has changed
+ * Format: DD-MM-YYYY with trailing space (e.g., "25-01-2025 ")
+ * @return Date string for file naming and day change detection
  */
 String getRTCDate()
 {
@@ -304,8 +332,11 @@ String getRTCDate()
 }
 
 /**
- * Synchronize RTC module with system time (after NTP sync)
- * Updates RTC hardware with current system time from NTP
+ * RTC UPDATE: Save internet time to RTC module
+ * After getting accurate time from NTP server, this function stores it in the RTC
+ * The RTC will keep this time even when ESP32 loses power (backup battery)
+ * This ensures accurate timekeeping for data logging
+ * Called automatically after successful NTP sync
  */
 void syncRTCFromSystemTime()
 {
@@ -335,8 +366,11 @@ void syncRTCFromSystemTime()
 // ================================
 
 /**
- * Read temperature and humidity from DHT22 sensor
- * Sets BME680 values to 9999 when sensor not available
+ * SENSOR READ: Get temperature and humidity from DHT22
+ * DHT22 is the primary environmental sensor (temperature + humidity)
+ * BME680 is optional - if not connected, values are set to 9999 (indicates "no data")
+ * Temperature in Celsius, humidity as percentage (0-100%)
+ * Updates global variables: temperature, humidity, pressure, gas, altitudeBme
  */
 void readSensors()
 {
@@ -358,8 +392,11 @@ void readSensors()
 }
 
 /**
- * Read all data from PMS5003 air quality sensor
- * Includes PM values, particle counts, and environmental data from sensor
+ * SENSOR READ: Get air quality data from PMS5003 sensor
+ * PMS5003 measures particulate matter (PM1, PM2.5, PM10) in micrograms per cubic meter
+ * Also counts particles by size and provides temperature/humidity/formaldehyde readings
+ * Standard vs Atmospheric: Standard = lab conditions, Atmospheric = real-world conditions
+ * Updates global variables: val1-val6 (PM values), c_300-c_10000 (particle counts), pms_temp, pms_h, pms_fld
  */
 void readPMSSensor()
 {
@@ -394,8 +431,12 @@ void readPMSSensor()
 }
 
 /**
- * Calculate Air Quality Index (AQI) based on PM2.5 concentration
- * Uses Indian AQI standards for categorization
+ * AQI CALCULATION: Convert PM2.5 reading to Air Quality Index
+ * AQI is a standardized way to communicate air pollution levels to the public
+ * Based on Indian AQI standards using PM2.5 concentration:
+ * 0-30 μg/m³ = Good, 30-60 = Satisfactory, 60-90 = Moderate
+ * 90-120 = Poor, 120-250 = Very Poor, 250+ = Severe
+ * Updates global variables: pm25_aqi (numeric 1-6), aqi (text description)
  */
 void calculateAQI()
 {
@@ -465,9 +506,11 @@ void calculateAQI()
 // ================================
 
 /**
- * Update OLED display with sensor readings
- * Shows temperature, humidity, and PM concentrations
- * @param messge Status message to display at top
+ * DISPLAY UPDATE: Show current sensor data on OLED screen
+ * Updates the small OLED display with live environmental readings
+ * Shows: status message, temperature, humidity, PM1/PM2.5/PM10 values
+ * Called every 3 seconds to refresh the display
+ * @param messge Status text to show at top (e.g., "Using RTC Time")
  */
 void updateDisplay(String messge)
 {
@@ -511,8 +554,10 @@ void updateDisplay(String messge)
 }
 
 /**
- * Update OLED display with AQI information
- * Shows current date/time and air quality status
+ * DISPLAY UPDATE: Show Air Quality Index on OLED screen
+ * Alternates with sensor display every 5 seconds
+ * Shows current date/time in large font and AQI status (Good/Poor/etc.)
+ * Provides quick visual indication of air quality for users
  */
 void updateAQIDisplay()
 {
@@ -538,8 +583,11 @@ void updateAQIDisplay()
 // ================================
 
 /**
- * Check if daily CSV file exists, create with headers if not
- * File naming format: AU_PMS_CAPSTONE_YYYY-MM-DD.csv
+ * FILE MANAGEMENT: Ensure today's CSV file exists
+ * Creates a new CSV file each day with proper headers
+ * File naming: [S0]_[S1]YYYY-MM-DD.csv (e.g., "O_015_AU_PMS_CAPSTONE_2025-01-25.csv")
+ * Headers include all sensor data columns for proper CSV format
+ * Called when day changes to start fresh daily log
  */
 void checkFileExists()
 {
@@ -606,8 +654,11 @@ void checkFileExists()
 }
 
 /**
- * Log sensor data to SD card CSV file
- * Appends new data row with timestamp and all sensor readings
+ * DATA LOGGING: Save all sensor readings to SD card
+ * Appends one row of data to today's CSV file every 10 seconds
+ * Includes: timestamp, temperature, humidity, all PM values, particle counts,
+ * GPS coordinates (fixed), and environmental data from PMS sensor
+ * Data is preserved even if device loses power - stored on SD card
  */
 void logDataSdCard()
 {
@@ -674,8 +725,11 @@ void logDataSdCard()
 // SETUP FUNCTION
 // ================================
 /**
- * Initialize all hardware components and establish connections
- * Sets up sensors, display, WiFi, RTC, and SD card
+ * SYSTEM STARTUP: Initialize all hardware and establish connections
+ * This function runs once when ESP32 powers on or resets
+ * Sets up: Serial communication, I2C bus, WiFi, sensors, display, SD card
+ * Handles first-boot WiFi setup and time synchronization
+ * If anything fails during setup, error messages are printed to Serial Monitor
  */
 void setup()
 {
@@ -829,8 +883,11 @@ void setup()
 // ================================
 
 /**
- * Maintain WiFi connection and handle reconnection attempts
- * Performs NTP sync once per connection session
+ * WIFI MANAGEMENT: Keep WiFi connected and sync time when possible
+ * Monitors WiFi status and attempts reconnection if disconnected
+ * Performs NTP time sync once per WiFi connection session
+ * Throttles reconnection attempts to avoid spam (30 second intervals)
+ * Called continuously from main loop
  */
 void maintainWiFi()
 {
@@ -880,8 +937,11 @@ void maintainWiFi()
 }
 
 /**
- * Perform periodic NTP synchronization (every 24 hours)
- * Ensures RTC stays accurate over long periods
+ * TIME MAINTENANCE: Sync with internet time every 24 hours
+ * Even though RTC keeps good time, it can drift slightly over days/weeks
+ * This function automatically corrects RTC time once per day when WiFi is available
+ * Helps maintain accurate timestamps for data logging over long periods
+ * Only runs when WiFi is connected to internet
  */
 void periodicNtpSync()
 {
@@ -923,8 +983,15 @@ void periodicNtpSync()
 // MAIN LOOP
 // ================================
 /**
- * Main program loop - runs continuously
- * Handles sensor readings, display updates, and data logging
+ * MAIN PROGRAM: Continuous operation loop
+ * This function runs forever after setup() completes
+ * Manages all ongoing tasks:
+ * - Maintain WiFi connection and time sync
+ * - Read sensors every few seconds
+ * - Update display alternately (sensor data / AQI info)
+ * - Log data to SD card every 10 seconds
+ * - Create new daily files when date changes
+ * Uses timing controls to prevent overwhelming the system
  */
 void loop()
 {
