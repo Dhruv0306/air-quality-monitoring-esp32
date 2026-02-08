@@ -499,7 +499,8 @@ if (millis() - lastMainLoopAttempt < 1000)
 
 ## License
 
-This project is open source. Modify and distribute as needed for educational and research purposes.
+This project is not open source. To Modify or distribution of code please take permission from PMS lab at School of Science, Ahmedabad University.
+PMS lab contect email: 
 
 ---
 
