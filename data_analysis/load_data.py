@@ -31,10 +31,15 @@ def load_data_file(file_path):
         )
 
         if data is not None:
-            data["DateTime"] = pd.to_datetime(
-                data["DateTime"], format="%d-%m-%Y %H:%M:%S"
-            )
-        print(f"Data loaded successfully from {file_path}")
+            try:
+                data["DateTime"] = pd.to_datetime(
+                    data["DateTime"], format="%d-%m-%Y %H:%M:%S"
+                )
+            except Exception as e:
+                data["DateTime"] = pd.to_datetime(data["DateTime"], dayfirst=True)
+        
+        data = data.sort_values("DateTime").drop_duplicates(subset="DateTime", keep="first")
+        print(f"Data loaded successfully from {file_path}, with {len(data)} rows and {len(data.columns)} columns.")
         return data
     except Exception as e:
         print(f"An error occurred while loading data: {e}")
@@ -56,7 +61,7 @@ def load_data_directory(directory_path):
     data_dict = {}
 
     try:
-        for file_name in os.listdir(directory_path):
+        for file_name in sorted(os.listdir(directory_path)):
             if file_name.endswith(".csv"):
                 file_path = os.path.join(directory_path, file_name)
                 data_dict[file_name] = load_data_file(file_path)
