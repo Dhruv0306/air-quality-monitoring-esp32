@@ -13,6 +13,27 @@ def load_data_file(file_path):
     """
     try:
         data = pd.read_csv(file_path)
+        # drop unnecessary columns
+        data = data.drop(
+            columns=[
+                "Pressure",
+                "Gas",
+                "Altitude",
+                "pms_temp",
+                "pms_humidity",
+                "pms_formaldihyde",
+                "Latitude",
+                "Longitude",
+                "Altitude_GPS",
+                "Satellite",
+            ],
+            errors="ignore",
+        )
+
+        if data is not None:
+            data["DateTime"] = pd.to_datetime(
+                data["DateTime"], format="%d-%m-%Y %H:%M:%S"
+            )
         print(f"Data loaded successfully from {file_path}")
         return data
     except Exception as e:
