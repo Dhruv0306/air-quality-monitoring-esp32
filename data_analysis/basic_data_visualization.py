@@ -61,9 +61,9 @@ def basic_data_visualization():
                 plt.xticks(rotation=45)
                 plt.tight_layout()
 
-                os.makedirs("data\\Dhruv_Patel\\Plots", exist_ok=True)
+                os.makedirs("data\\Dhruv_Patel\\Plots\\Basic_Single_day_temporal_comparison", exist_ok=True)
                 plt.savefig(
-                    f"data\\Dhruv_Patel\\Plots\\{column}_temporal_comparison.png",
+                    f"data\\Dhruv_Patel\\Plots\\Basic_Single_day_temporal_comparison\\{column}_temporal_comparison.png",
                     dpi=300,
                     bbox_inches="tight",
                 )
