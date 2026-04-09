@@ -45,6 +45,7 @@ dataset_dic = {
     },
 }
 
+
 # ============================================================================
 # Load Data - Helper Function
 # ============================================================================
@@ -88,12 +89,13 @@ parth_kitchen = get_data(dataset_dic["Parth_Mevada"]["Kitchen"])
 parth_hall = get_data(dataset_dic["Parth_Mevada"]["Hall"])
 parth_bedroom = get_data(dataset_dic["Parth_Mevada"]["Bedroom"])
 
+
 # ============================================================================
 # Remove None Values and Convert Data to 1 min Average
 # ============================================================================
 def remove_none_and_average(data, name):
     print(f"{name} shape before removing none values: {data.shape}")
-    # Remove None values from all the columns
+    # Remove None values from all the coloums
     data = data.dropna()
     print(f"{name} shape after removing none values: {data.shape}")
 
@@ -131,6 +133,7 @@ honeyy_bedroom = remove_none_and_average(honeyy_bedroom, "honeyy_bedroom")
 parth_kitchen = remove_none_and_average(parth_kitchen, "parth_kitchen")
 parth_hall = remove_none_and_average(parth_hall, "parth_hall")
 parth_bedroom = remove_none_and_average(parth_bedroom, "parth_bedroom")
+
 
 # ============================================================================
 # Remove Outliers
@@ -194,6 +197,7 @@ bedroom = bedroom[pd.to_datetime(bedroom.index) > cutoff]
 PLOT_DIR = "data/Plots"
 os.makedirs(PLOT_DIR, exist_ok=True)
 
+
 # ============================================================================
 # Multi-Day Time Series (Foundation Plot)
 # ============================================================================
@@ -206,29 +210,38 @@ def multi_day_time_series(kitchen_df=None, hall_df=None, bedroom_df=None):
         raise ValueError("hall_df is None")
 
     # Create a list of only the `DateTime` and `pm2.5atm` columns for each room
-    bedroom_df_subset = bedroom_df[["pm2.5atm"]]
-    hall_df_subset = hall_df[["pm2.5atm"]]
-    kitchen_df_subset = kitchen_df[["pm2.5atm"]]
+    bedroom_df_subset = bedroom_df[["pm2.5atm"]].copy()
+    hall_df_subset = hall_df[["pm2.5atm"]].copy()
+    kitchen_df_subset = kitchen_df[["pm2.5atm"]].copy()
+
+    # Log scale requires positive values
+    kitchen_series = kitchen_df_subset["pm2.5atm"].where(
+        kitchen_df_subset["pm2.5atm"] > 0
+    )
+    hall_series = hall_df_subset["pm2.5atm"].where(hall_df_subset["pm2.5atm"] > 0)
+    bedroom_series = bedroom_df_subset["pm2.5atm"].where(
+        bedroom_df_subset["pm2.5atm"] > 0
+    )
 
     # Plot the perminute average of `pm2.5atm` for each room in a single plot with WHO and INDIA NAAQS guideline line
     plt.figure(figsize=(15, 8))
     plt.plot(
         kitchen_df_subset.index,
-        kitchen_df_subset["pm2.5atm"],
+        kitchen_series,
         color=kitchen_colour,
         label="Kitchen",
         alpha=0.8,
     )
     plt.plot(
         hall_df_subset.index,
-        hall_df_subset["pm2.5atm"],
+        hall_series,
         color=hall_colour,
         label="Hall",
         alpha=0.8,
     )
     plt.plot(
         bedroom_df_subset.index,
-        bedroom_df_subset["pm2.5atm"],
+        bedroom_series,
         color=bedroom_colour,
         label="Bedroom",
         alpha=0.8,
@@ -247,16 +260,15 @@ def multi_day_time_series(kitchen_df=None, hall_df=None, bedroom_df=None):
         label="India 24hr NAAQS (60 µg/m³)",
         linewidth=3,
     )
-    plt.xlabel("Time")
-    plt.ylabel("PM2.5 (µg/m³)")
+    plt.yscale("log")
+    plt.xlabel("Date")
+    plt.ylabel("PM2.5 (µg/m³, log scale)")
     plt.title("Multi-Day Time Series of PM2.5")
     plt.legend()
-    plt.grid(alpha=0.3)
-    # Format x-axis to show date and time
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d %H:%M"))
-    plt.gca().xaxis.set_major_locator(
-        mdates.DayLocator(interval=1)
-    )  # Adjust interval as needed
+    plt.grid(alpha=0.3, which="both")
+    # Format x-axis to show date only
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=1))
     plt.xticks(rotation=45)
     # Save the plot
     plt.tight_layout()
@@ -450,7 +462,8 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
         palette=[kitchen_colour, hall_colour, bedroom_colour],
         legend=False,
     )
-    plt.ylabel("PM2.5 (µg/m³)")
+    plt.yscale("log")
+    plt.ylabel("PM2.5 (µg/m³, log scale)")
     plt.title("Daily Boxplot of PM2.5 by Room")
     # Save the plot
     plt.tight_layout()
@@ -458,7 +471,7 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
     # Show the plot
     plt.show()
 
-    # Extract Day from DateTime index for each room and calculate daily average pm2.5atm
+    # Extract Date from DateTime index for each room and calculate daily average pm2.5atm
     kitchen_daily = kitchen_df.copy()
     hall_daily = hall_df.copy()
     bedroom_daily = bedroom_df.copy()
@@ -475,7 +488,7 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
     }
     rooms = ["Kitchen", "Hall", "Bedroom"]
 
-    fig, axes = plt.subplots(1, 3, figsize=(24, 10), sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(40, 10), sharey=True)
 
     for idx, room in enumerate(rooms):
         # Get data for current room from the corresponding dataframe
@@ -515,8 +528,10 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
                 patch.set_alpha(0.8)
 
         axes[idx].set_title(f"{room} - Daily PM2.5 Distribution", fontweight="bold")
-        axes[idx].set_ylabel("PM2.5 (µg/m³)" if idx == 0 else "")
-        axes[idx].grid(True, alpha=0.3)
+        axes[idx].set_xlabel("Day")
+        axes[idx].set_ylabel("PM2.5 (µg/m³, log scale)" if idx == 0 else "")
+        axes[idx].set_yscale("log")
+        axes[idx].grid(True, alpha=0.3, which="both")
 
     fig.suptitle("Comprehensive Daily PM2.5 Analysis", fontsize=16, fontweight="bold")
     fig.tight_layout()
@@ -1003,7 +1018,7 @@ def get_total_hours(period):
     elif period == "Evening Cooking + Dinner":
         return 5  # 17-22
     else:
-        return 13  # remaining hours
+        return 13
 
 
 def calculate_cooking_related_PM2_5_contribution_analysis(
@@ -1111,51 +1126,53 @@ def classify_period_simple(t):
         return "Non-Cooking"
 
 
-def decay_rate_after_cooking(kitchen_df=None):
-    if kitchen_df is None:
-        raise ValueError("kitchen_df is None")
+def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
+    if room_df is None:
+        raise ValueError("room_df is None")
+    if room_colour is None:
+        raise ValueError("room_colour is None")
+    if room_name is None:
+        raise ValueError("room_name is None")
 
     # Keep DateTime index (must be DatetimeIndex for .hour/.date access)
-    kitchen_decay_df = kitchen_df[["pm2.5atm"]].copy()
-    kitchen_decay_df.index = pd.to_datetime(kitchen_decay_df.index)
+    room_decay_df = room_df[["pm2.5atm"]].copy()
+    room_decay_df.index = pd.to_datetime(room_decay_df.index)
 
     # Basic time features
-    kitchen_decay_df["Date"] = kitchen_decay_df.index.date
-    kitchen_decay_df["Time"] = kitchen_decay_df.index.time
-    kitchen_decay_df["Period"] = kitchen_decay_df["Time"].apply(classify_period_simple)
+    room_decay_df["Date"] = room_decay_df.index.date
+    room_decay_df["Time"] = room_decay_df.index.time
+    room_decay_df["Period"] = room_decay_df["Time"].apply(classify_period_simple)
 
     # Daily stats (map instead of merge to preserve DateTime index)
-    kitchen_daily_avg = kitchen_decay_df.groupby("Date")["pm2.5atm"].mean()
-    daily_baseline = kitchen_decay_df.groupby("Date")[
+    room_daily_avg = room_decay_df.groupby("Date")["pm2.5atm"].mean()
+    daily_baseline = room_decay_df.groupby("Date")[
         "pm2.5atm"
     ].mean()  # same as daily avg in current logic
     baseline_margin = 0.4
 
-    kitchen_decay_df["DailyAvg"] = kitchen_decay_df["Date"].map(kitchen_daily_avg)
-    kitchen_decay_df["Baseline"] = kitchen_decay_df["Date"].map(daily_baseline)
+    room_decay_df["DailyAvg"] = room_decay_df["Date"].map(room_daily_avg)
+    room_decay_df["Baseline"] = room_decay_df["Date"].map(daily_baseline)
 
-    baseline_global = kitchen_decay_df.loc[
-        kitchen_decay_df["Period"] == "Non-Cooking", "pm2.5atm"
+    baseline_global = room_decay_df.loc[
+        room_decay_df["Period"] == "Non-Cooking", "pm2.5atm"
     ].mean()
-    kitchen_decay_df["Baseline"] = kitchen_decay_df["Baseline"].fillna(baseline_global)
+    room_decay_df["Baseline"] = room_decay_df["Baseline"].fillna(baseline_global)
 
     # Major spike episodes during cooking
-    is_major = (kitchen_decay_df["Period"] == "Cooking") & (
-        kitchen_decay_df["pm2.5atm"] > kitchen_decay_df["DailyAvg"]
+    is_major = (room_decay_df["Period"] == "Cooking") & (
+        room_decay_df["pm2.5atm"] > room_decay_df["DailyAvg"]
     )
     start_of_event = is_major & ~is_major.shift(fill_value=False)
-    kitchen_decay_df["Event ID"] = start_of_event.cumsum()
-    kitchen_decay_df.loc[~is_major, "Event ID"] = np.nan
+    room_decay_df["Event ID"] = start_of_event.cumsum()
+    room_decay_df.loc[~is_major, "Event ID"] = np.nan
 
     # Compute decay metrics
     records = []
     max_decay_hours = 12
     min_consecutive_points = 3
 
-    for event_id in kitchen_decay_df["Event ID"].dropna().unique():
-        event_data = kitchen_decay_df[
-            kitchen_decay_df["Event ID"] == event_id
-        ].sort_index()
+    for event_id in room_decay_df["Event ID"].dropna().unique():
+        event_data = room_decay_df[room_decay_df["Event ID"] == event_id].sort_index()
         if len(event_data) < 2:
             continue
 
@@ -1191,6 +1208,7 @@ def decay_rate_after_cooking(kitchen_df=None):
                 "Date": max_conc_date,
                 "Peak Hour": max_conc_hour,
                 "Recovery Hour": recovery_hour,
+                "Recovery Time": recovery_point,
                 "Decay Duration (hours)": decay_duration,
                 "Initial Concentration": initial_conc,
                 "Final Concentration": final_conc,
@@ -1200,17 +1218,19 @@ def decay_rate_after_cooking(kitchen_df=None):
 
     decay_df = pd.DataFrame(records)
     if decay_df.empty:
-        print("\nDecay Rate Analysis After Cooking Events in Kitchen:")
+        print(f"\nDecay Rate Analysis After Cooking Events in {room_name}:")
         print("No valid decay events found.")
         return decay_df
 
     decay_df = decay_df.sort_values(by=["Date", "Peak Hour"]).reset_index(drop=True)
 
-    print("\nDecay Rate Analysis After Cooking Events in Kitchen:")
+    print(f"\nDecay Rate Analysis After Cooking Events in {room_name}:")
     print(decay_df)
     os.makedirs(os.path.join(PLOT_DIR, "Decay_Rate_Analysis"), exist_ok=True)
     decay_df.to_csv(
-        os.path.join(PLOT_DIR, "Decay_Rate_Analysis", "Kitchen_Decay_Analysis.csv"),
+        os.path.join(
+            PLOT_DIR, "Decay_Rate_Analysis", f"{room_name}_Decay_Analysis.csv"
+        ),
         index=False,
     )
 
@@ -1219,9 +1239,11 @@ def decay_rate_after_cooking(kitchen_df=None):
 
     # Plot representative event
     rep_event_id = rep["Event ID"]
-    event_data = kitchen_decay_df[
-        kitchen_decay_df["Event ID"] == rep_event_id
-    ].sort_index()
+    event_data = room_decay_df[room_decay_df["Event ID"] == rep_event_id].sort_index()
+    recovery_time = pd.to_datetime(rep["Recovery Time"])
+    if isinstance(recovery_time, pd.Series):
+        recovery_time = recovery_time.iloc[0]
+    event_data = event_data.loc[:recovery_time]
 
     plt.figure(figsize=(12, 6))
     plt.plot(
@@ -1229,7 +1251,7 @@ def decay_rate_after_cooking(kitchen_df=None):
         event_data["pm2.5atm"],
         marker="o",
         label="PM2.5 Concentration",
-        color=kitchen_colour,
+        color=room_colour,
         alpha=0.8,
     )
     initial_concentration = rep["Initial Concentration"]
@@ -1264,7 +1286,7 @@ def decay_rate_after_cooking(kitchen_df=None):
     )
     plt.annotate(
         f"Recovery {final_concentration:.1f}",
-        xy=(event_data.index[-1], event_data["pm2.5atm"].iloc[-1]),
+        xy=(recovery_time, float(final_concentration)),
         xytext=(3, -15),
         textcoords="offset points",
         arrowprops=dict(arrowstyle="->", color="green"),
@@ -1302,8 +1324,7 @@ def decay_rate_after_cooking(kitchen_df=None):
     if isinstance(peak_value, pd.Series):
         peak_value = peak_value.iloc[0]
 
-    recovery_time = event_data.index[-1]
-    recovery_value = event_data["pm2.5atm"].iloc[-1]
+    recovery_value = event_data.loc[recovery_time, "pm2.5atm"]
     if isinstance(recovery_value, pd.Series):
         recovery_value = recovery_value.iloc[0]
 
@@ -1327,7 +1348,7 @@ def decay_rate_after_cooking(kitchen_df=None):
         fontsize=9,
         fontweight="bold",
         color="black",
-        rotation=-35
+        rotation=-35,
     )
 
     peak_hour = rep["Peak Hour"]
@@ -1342,7 +1363,7 @@ def decay_rate_after_cooking(kitchen_df=None):
     plt.legend()
     plt.tight_layout()
     plt.savefig(
-        os.path.join(PLOT_DIR, "Decay_Rate_Analysis", "Kitchen_Decay_Curve.png"),
+        os.path.join(PLOT_DIR, "Decay_Rate_Analysis", f"{room_name}_Decay_Curve.png"),
         dpi=600,
         bbox_inches="tight",
     )
@@ -1397,7 +1418,9 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("Running Decay Rate After Cooking Analysis...")
     print("=" * 80)
-    decay_rate_after_cooking(kitchen_df=kitchen)
+    decay_rate_after_cooking(room_df=kitchen, room_colour=kitchen_colour, room_name="Kitchen")
+    decay_rate_after_cooking(room_df=hall, room_colour=hall_colour, room_name="Hall")
+    decay_rate_after_cooking(room_df=bedroom, room_colour=bedroom_colour, room_name="Bedroom")
 
     print("\n" + "=" * 80)
     print("All analyses completed successfully!")
