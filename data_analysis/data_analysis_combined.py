@@ -568,6 +568,29 @@ def diurnal_pattern(kitchen_df=None, hall_df=None, bedroom_df=None):
     hall_hourly_avg = hall_hourly_df.groupby("Hour")["pm2.5atm"].mean()
     kitchen_hourly_avg = kitchen_hourly_df.groupby("Hour")["pm2.5atm"].mean()
 
+    # Print average of pm2.5atm between 5am to 6am and 4pm to 5pm for each room
+    print("Average PM2.5 between 5am to 6am:")
+    print(f"  Kitchen: {kitchen_hourly_avg.get(5, np.nan):.2f} µg/m³")
+    print(f"  Hall: {hall_hourly_avg.get(5, np.nan):.2f} µg/m³")
+    print(f"  Bedroom: {bedroom_hourly_avg.get(5, np.nan):.2f} µg/m³")
+    print("Average PM2.5 between 4pm to 5pm:")
+    print(f"  Kitchen: {kitchen_hourly_avg.get(16, np.nan):.2f} µg/m³")
+    print(f"  Hall: {hall_hourly_avg.get(16, np.nan):.2f} µg/m³")
+    print(f"  Bedroom: {bedroom_hourly_avg.get(16, np.nan):.2f} µg/m³")
+    print("Average PM2.5 between 5am to 6am and 4pm to 5pm:")
+    kitchen_base_avg = (
+        kitchen_hourly_avg.get(5, np.nan) + kitchen_hourly_avg.get(16, np.nan)
+    ) / 2
+    hall_base_avg = (
+        hall_hourly_avg.get(5, np.nan) + hall_hourly_avg.get(16, np.nan)
+    ) / 2
+    bedroom_base_avg = (
+        bedroom_hourly_avg.get(5, np.nan) + bedroom_hourly_avg.get(16, np.nan)
+    ) / 2
+    print(f"  Kitchen: {kitchen_base_avg:.2f} µg/m³")
+    print(f"  Hall: {hall_base_avg:.2f} µg/m³")
+    print(f"  Bedroom: {bedroom_base_avg:.2f} µg/m³")
+
     # Plot the diurnal pattern for each room
     plt.figure(figsize=(15, 6))
     plt.plot(
@@ -591,6 +614,22 @@ def diurnal_pattern(kitchen_df=None, hall_df=None, bedroom_df=None):
         label="Bedroom",
         alpha=0.8,
     )
+
+    # Add horizontal guideline lines for WHO and India limits
+    plt.axhline(
+        y=25,
+        color=who_guideline_colour,
+        linestyle="--",
+        label="WHO 24hr Guideline (25 µg/m³)",
+        linewidth=3,
+    )
+    plt.axhline(
+        y=60,
+        color=india_guideline_colour,
+        linestyle="--",
+        label="India 24hr NAAQS (60 µg/m³)",
+        linewidth=3,
+    )
     plt.xlabel("Hour of the Day")
     plt.xticks(range(0, 24, 1))
     plt.ylabel("Average PM2.5 (µg/m³)")
@@ -602,54 +641,52 @@ def diurnal_pattern(kitchen_df=None, hall_df=None, bedroom_df=None):
     plt.savefig(os.path.join(PLOT_DIR, "Diurnal_Pattern.png"))
     # Show the plot
     plt.show()
+    return kitchen_base_avg, hall_base_avg, bedroom_base_avg
 
 
 # ============================================================================
 # Peak Event Analysis
 # ============================================================================
-def peak_event_analysis(kitchen_df=None, hall_df=None, bedroom_df=None):
+def peak_event_analysis(
+    kitchen_df=None,
+    hall_df=None,
+    bedroom_df=None,
+    kitchen_base_avg=None,
+    hall_base_avg=None,
+    bedroom_base_avg=None,
+):
     if kitchen_df is None:
         raise ValueError("kitchen_df is None")
     if hall_df is None:
         raise ValueError("hall_df is None")
     if bedroom_df is None:
         raise ValueError("bedroom_df is None")
+    if kitchen_base_avg is None:
+        raise ValueError("kitchen_base_avg is None")
+    if hall_base_avg is None:
+        raise ValueError("hall_base_avg is None")
+    if bedroom_base_avg is None:
+        raise ValueError("bedroom_base_avg is None")
 
     # Create a list of only the 'DateTime' index and `pm2.5atm` columns for each room
     kitchen_peak_df = kitchen_df[["pm2.5atm"]]
     hall_peak_df = hall_df[["pm2.5atm"]]
     bedroom_peak_df = bedroom_df[["pm2.5atm"]]
 
-    # Calculate average of each date for each room
-    kitchen_peak_df["Date"] = kitchen_peak_df.index.date
-    hall_peak_df["Date"] = hall_peak_df.index.date
-    bedroom_peak_df["Date"] = bedroom_peak_df.index.date
-    kitchen_daily_avg = kitchen_peak_df.groupby("Date")["pm2.5atm"].mean()
-    hall_daily_avg = hall_peak_df.groupby("Date")["pm2.5atm"].mean()
-    bedroom_daily_avg = bedroom_peak_df.groupby("Date")["pm2.5atm"].mean()
-
-    # Create a new column to identify peak events for each room based on the same day average
-    kitchen_peak_df = kitchen_peak_df.merge(
-        kitchen_daily_avg.rename("DailyAvg"), left_on="Date", right_index=True
-    )
-    hall_peak_df = hall_peak_df.merge(
-        hall_daily_avg.rename("DailyAvg"), left_on="Date", right_index=True
-    )
-    bedroom_peak_df = bedroom_peak_df.merge(
-        bedroom_daily_avg.rename("DailyAvg"), left_on="Date", right_index=True
-    )
-    kitchen_peak_df["Peak Event"] = (
-        kitchen_peak_df["pm2.5atm"] > kitchen_peak_df["DailyAvg"]
-    )
-    hall_peak_df["Peak Event"] = hall_peak_df["pm2.5atm"] > hall_peak_df["DailyAvg"]
-    bedroom_peak_df["Peak Event"] = (
-        bedroom_peak_df["pm2.5atm"] > bedroom_peak_df["DailyAvg"]
-    )
+    # Create a new column to identify peak events for each room based provided base average (average of 5am-6am and 4pm-5pm) for each room. A peak event is defined as a time when `pm2.5atm` exceeds the base average for that room.
+    kitchen_peak_df["Peak Event"] = kitchen_peak_df["pm2.5atm"] > kitchen_base_avg
+    hall_peak_df["Peak Event"] = hall_peak_df["pm2.5atm"] > hall_base_avg
+    bedroom_peak_df["Peak Event"] = bedroom_peak_df["pm2.5atm"] > bedroom_base_avg
 
     # Ensure that data frames are sorted by DateTime
     kitchen_peak_df.sort_index(inplace=True)
     hall_peak_df.sort_index(inplace=True)
     bedroom_peak_df.sort_index(inplace=True)
+
+    # Create a new column for the date (without time) in each dataframe
+    kitchen_peak_df["Date"] = kitchen_peak_df.index.date
+    hall_peak_df["Date"] = hall_peak_df.index.date
+    bedroom_peak_df["Date"] = bedroom_peak_df.index.date
 
     # Identify Peack Start
     bedroom_peak_df["Peak Start"] = (bedroom_peak_df["Peak Event"] == True) & (
@@ -999,6 +1036,9 @@ def peak_event_analysis(kitchen_df=None, hall_df=None, bedroom_df=None):
 # ============================================================================
 # Cooking-Related PM2.5 Contribution Analysis
 # ============================================================================
+from datetime import time
+
+
 def classify_period(t):
     """
     Morning + Afternoon : 6:00 to 12:00 (From morning tea to Lunch)
@@ -1018,11 +1058,11 @@ def get_total_hours(period):
     elif period == "Evening Cooking + Dinner":
         return 5  # 17-22
     else:
-        return 13
+        return 13  # remaining hours
 
 
 def calculate_cooking_related_PM2_5_contribution_analysis(
-    room_name=None, room_df=None, room_colour=None
+    room_name=None, room_df=None, room_colour=None, room_base_avg=None
 ):
     if room_df is None:
         raise ValueError("room_df is None")
@@ -1030,6 +1070,8 @@ def calculate_cooking_related_PM2_5_contribution_analysis(
         raise ValueError("room_name is None")
     if room_colour is None:
         raise ValueError("room_colour is None")
+    if room_base_avg is None:
+        raise ValueError("room_base_avg is None")
 
     room_df = room_df[["pm2.5atm"]].copy()
     room_df["Time"] = room_df.index.to_series().dt.time
@@ -1039,14 +1081,8 @@ def calculate_cooking_related_PM2_5_contribution_analysis(
 
     room_df["Period"] = room_df["Time"].apply(classify_period)
 
-    # Calculate average pm2.5atm for each day
-    daily_avg = room_df.groupby("Day")["pm2.5atm"].mean().reset_index(name="DailyAvg")
-
-    # Merge daily average back to the original dataframe
-    room_df = room_df.merge(daily_avg, on="Day")
-
-    # Identify peak events based on daily average
-    room_df["Peak Event"] = room_df["pm2.5atm"] > room_df["DailyAvg"]
+    # Identify peak events based on room_base_avg (average of 5am-6am and 4pm-5pm) for the room. A peak event is defined as a time when `pm2.5atm` exceeds the base average for that room.
+    room_df["Peak Event"] = room_df["pm2.5atm"] > room_base_avg
 
     # Compare `Mean`, `Max`, `Standard Deviation` of `pm2.5atm` by Period
     period_stats = (
@@ -1395,32 +1431,54 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("Running Diurnal Pattern Analysis...")
     print("=" * 80)
-    diurnal_pattern(kitchen_df=kitchen, hall_df=hall, bedroom_df=bedroom)
+    kitchen_base_avg, hall_base_avg, bedroom_base_avg = diurnal_pattern(
+        kitchen_df=kitchen, hall_df=hall, bedroom_df=bedroom
+    )
 
     print("\n" + "=" * 80)
     print("Running Peak Event Analysis...")
     print("=" * 80)
-    peak_event_analysis(kitchen_df=kitchen, hall_df=hall, bedroom_df=bedroom)
+    peak_event_analysis(
+        kitchen_df=kitchen,
+        hall_df=hall,
+        bedroom_df=bedroom,
+        kitchen_base_avg=kitchen_base_avg,
+        hall_base_avg=hall_base_avg,
+        bedroom_base_avg=bedroom_base_avg,
+    )
 
     print("\n" + "=" * 80)
     print("Running Cooking-Related PM2.5 Contribution Analysis...")
     print("=" * 80)
     calculate_cooking_related_PM2_5_contribution_analysis(
-        room_name="Kitchen", room_df=kitchen, room_colour=kitchen_colour
+        room_name="Kitchen",
+        room_df=kitchen,
+        room_colour=kitchen_colour,
+        room_base_avg=kitchen_base_avg,
     )
     calculate_cooking_related_PM2_5_contribution_analysis(
-        room_name="Hall", room_df=hall, room_colour=hall_colour
+        room_name="Hall",
+        room_df=hall,
+        room_colour=hall_colour,
+        room_base_avg=hall_base_avg,
     )
     calculate_cooking_related_PM2_5_contribution_analysis(
-        room_name="Bedroom", room_df=bedroom, room_colour=bedroom_colour
+        room_name="Bedroom",
+        room_df=bedroom,
+        room_colour=bedroom_colour,
+        room_base_avg=bedroom_base_avg,
     )
 
     print("\n" + "=" * 80)
     print("Running Decay Rate After Cooking Analysis...")
     print("=" * 80)
-    decay_rate_after_cooking(room_df=kitchen, room_colour=kitchen_colour, room_name="Kitchen")
+    decay_rate_after_cooking(
+        room_df=kitchen, room_colour=kitchen_colour, room_name="Kitchen"
+    )
     decay_rate_after_cooking(room_df=hall, room_colour=hall_colour, room_name="Hall")
-    decay_rate_after_cooking(room_df=bedroom, room_colour=bedroom_colour, room_name="Bedroom")
+    decay_rate_after_cooking(
+        room_df=bedroom, room_colour=bedroom_colour, room_name="Bedroom"
+    )
 
     print("\n" + "=" * 80)
     print("All analyses completed successfully!")
