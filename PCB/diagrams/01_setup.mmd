@@ -1,36 +1,68 @@
-flowchart LR
+flowchart TB
     subgraph Inputs
         PWR["Power-on / Reset"]
     end
 
-    PWR --> SERIAL["Init Serial (9600 baud)<br>& Serial2 for PMS5003"]
-    SERIAL --> I2C["Init I2C bus (Wire)<br>Set 400 kHz clock"]
-    I2C --> WIFI_MODE["Set WiFi.mode(WIFI_STA)"]
-    WIFI_MODE --> OLED["Init OLED SSD1306<br>(0x3C address)"]
+    subgraph ROW1 [" "]
+        direction LR
+        SERIAL["Init Serial (9600 baud)<br>& Serial2 for PMS5003"]
+        I2C["Init I2C bus (Wire)<br>Set 400 kHz clock"]
+        WIFI_MODE["Set WiFi.mode(WIFI_STA)"]
+        OLED["Init OLED SSD1306<br>(0x3C address)"]
+    end
 
-    OLED --> CRED_CHK{"WiFi credentials<br>stored?"}
-    CRED_CHK -- "No (first boot)" --> PORTAL["setupWiFiFirstTime()<br>Create AP portal"]
-    CRED_CHK -- "Yes" --> AUTO["WiFi.begin()<br>Auto-connect"]
+    subgraph ROW2 [" "]
+        direction LR
+        CRED_CHK{"WiFi credentials<br>stored?"}
+        PORTAL["setupWiFiFirstTime()<br>Create AP portal"]
+        AUTO["WiFi.begin()<br>Auto-connect"]
+    end
 
-    PORTAL --> RTC_CHK
-    AUTO --> RTC_CHK
+    subgraph ROW3 [" "]
+        direction LR
+        RTC_CHK{"isRTCValid()?"}
+        LOAD_RTC["setTime() from<br>RTC registers<br>rtcSynced ← true"]
+        NTP_CHK{"WiFi connected?"}
+        NTP_SYNC["syncTimeFromNTP()<br>syncRTCFromSystemTime()<br>ntpSynced ← true"]
+    end
 
-    RTC_CHK{"isRTCValid()?"} -- "Yes" --> LOAD_RTC["setTime() from<br>RTC registers<br>rtcSynced ← true"]
-    RTC_CHK -- "No" --> NTP_CHK
+    subgraph ROW4 [" "]
+        direction LR
+        SENSORS["Init PMS5003 (passive)<br>Init DHT22<br>Try BME680"]
+        SD_INIT["SD.begin(SD_CS)"]
+        DONE["Setup complete →<br>enter loop()"]
+    end
 
-    LOAD_RTC --> NTP_CHK{"WiFi connected?"}
-    NTP_CHK -- "Yes" --> NTP_SYNC["syncTimeFromNTP()<br>syncRTCFromSystemTime()<br>ntpSynced ← true"]
-    NTP_CHK -- "No" --> SENSORS
-
-    NTP_SYNC --> SENSORS["Init PMS5003 (passive)<br>Init DHT22<br>Try BME680"]
-    SENSORS --> SD_INIT["SD.begin(SD_CS)"]
-
-    SD_INIT --> DONE["Setup complete →<br>enter loop()"]
-
-    subgraph Outputs / Side-Effects
+    subgraph Outputs ["Outputs / Side-Effects"]
         direction LR
         G1["Global flags:<br>wifiConnected<br>rtcSynced<br>ntpSynced<br>bmeAvailable"]
         G2["Hardware ready:<br>OLED, PMS, DHT,<br>BME680, SD card"]
     end
+
+    PWR --> SERIAL
+    SERIAL --> I2C --> WIFI_MODE --> OLED
+
+    OLED --> CRED_CHK
+    CRED_CHK -- "No (first boot)" --> PORTAL
+    CRED_CHK -- "Yes" --> AUTO
+
+    PORTAL --> RTC_CHK
+    AUTO --> RTC_CHK
+
+    RTC_CHK -- "Yes" --> LOAD_RTC
+    RTC_CHK -- "No" --> NTP_CHK
+
+    LOAD_RTC --> NTP_CHK
+    NTP_CHK -- "Yes" --> NTP_SYNC
+    NTP_CHK -- "No" --> SENSORS
+
+    NTP_SYNC --> SENSORS
+    SENSORS --> SD_INIT --> DONE
+
     DONE --> G1
     DONE --> G2
+
+    style ROW1 fill:none,stroke:none
+    style ROW2 fill:none,stroke:none
+    style ROW3 fill:none,stroke:none
+    style ROW4 fill:none,stroke:none
