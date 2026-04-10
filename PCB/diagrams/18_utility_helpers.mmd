@@ -1,0 +1,18 @@
+flowchart LR
+    subgraph "isLeapYear(y)"
+        Y["year"] --> D4{"y % 4 ≠ 0?"}
+        D4 -- "Yes" --> NL["return false"]
+        D4 -- "No" --> D100{"y % 100 ≠ 0?"}
+        D100 -- "Yes" --> LY["return true"]
+        D100 -- "No" --> D400{"y % 400 ≠ 0?"}
+        D400 -- "Yes" --> NL2["return false"]
+        D400 -- "No" --> LY2["return true"]
+    end
+
+    subgraph "daysInMonth(m, y)"
+        M["month"] --> APR{"Apr/Jun/Sep/Nov?"}
+        APR -- "Yes" --> T30["return 30"]
+        APR -- "No" --> FEB{"February?"}
+        FEB -- "Yes" --> LEAP["isLeapYear(y) ? 29 : 28"]
+        FEB -- "No" --> T31["return 31"]
+    end

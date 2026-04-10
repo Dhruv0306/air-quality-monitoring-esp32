@@ -1,0 +1,4 @@
+flowchart LR
+    RTC["DS3231 RTC<br>Registers"] -->|"year, month, day,<br>hour, minute, second"| FMT["Format:<br>DD-MM-YYYY HH:MM:SS<br>(leading zeros added)"]
+
+    FMT --> OUT["return String<br>e.g. '25-01-2025 14:30:15'"]

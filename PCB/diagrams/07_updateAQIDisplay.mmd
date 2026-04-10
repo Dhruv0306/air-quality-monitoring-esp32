@@ -1,0 +1,9 @@
+flowchart LR
+    subgraph Global Inputs
+        DT["dateTime string"]
+        AQ["aqi string<br>(Good / Poor / …)"]
+    end
+
+    DT --> FMT["clearDisplay()<br>TextSize 2: dateTime<br>TextSize 1: AQI label"]
+    AQ --> FMT
+    FMT --> OLED["OLED SSD1306<br>display.display()"]

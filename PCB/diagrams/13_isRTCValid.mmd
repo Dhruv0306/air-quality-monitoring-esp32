@@ -1,0 +1,5 @@
+flowchart LR
+    RTC["DS3231 RTC<br>Registers"] -->|"getYear()<br>getMonth()<br>getDate()<br>getHour()"| CHK{"year ≥ 24<br>month 1-12<br>day 1-31<br>hour 0-23?"}
+
+    CHK -- "All pass" --> T["return true"]
+    CHK -- "Any fail" --> F["return false"]

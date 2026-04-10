@@ -1,0 +1,6 @@
+flowchart LR
+    SYS["ESP32 system time<br>(struct tm)"] -->|"getLocalTime()"| CONV["Convert fields:<br>year: tm_year − 100<br>month: tm_mon + 1<br>date, hour, min, sec"]
+
+    CONV --> RTC["DS3231 RTC Module<br>setYear / setMonth /<br>setDate / setHour /<br>setMinute / setSecond"]
+
+    RTC --> FLAGS["rtcSynced ← true<br>lastNtpSyncEpoch ← now()"]

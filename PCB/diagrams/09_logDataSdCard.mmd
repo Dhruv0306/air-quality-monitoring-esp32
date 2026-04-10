@@ -1,0 +1,33 @@
+flowchart TD
+    subgraph Global Inputs
+        DT["dateTime"]
+        TEMP["temperature, humidity"]
+        BME_D["pressure, gas, altitudeBme"]
+        PM_STD["val1, val2, val3"]
+        PM_ATM["val4, val5, val6"]
+        PCNT["c_300 … c_10000"]
+        PMS_E["pms_temp, pms_h, pms_fld"]
+        GPS["lati, longi, atlt, noS"]
+    end
+
+    DT --> FMT
+    TEMP --> FMT
+    BME_D --> FMT
+    PM_STD --> FMT
+    PM_ATM --> FMT
+    PCNT --> FMT
+    PMS_E --> FMT
+    GPS --> FMT
+
+    RTC2["RTC Module<br>(year, month, day)"] --> FNAME["Build filename<br>S0_S1_YYYY-MM-DD.csv"]
+
+    FMT["snprintf → dataMessage<br>(comma-separated row)"] --> WRITE
+
+    FNAME --> OPEN["SD.open(filename, 'a+')"]
+    OPEN --> WRITE["file.print(dataMessage)"]
+    WRITE --> CLOSE["file.close()"]
+
+    subgraph Output
+        SD[("SD Card<br>(appended row)")]
+    end
+    WRITE --> SD

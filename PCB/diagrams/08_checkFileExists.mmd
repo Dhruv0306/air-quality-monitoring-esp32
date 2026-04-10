@@ -1,0 +1,19 @@
+flowchart TD
+    subgraph Inputs
+        RTC["RTC Module<br>(year, month, day)"]
+        CFG["S0, S1<br>(device ID strings)"]
+    end
+
+    RTC --> FMT["Format date:<br>YYYY-MM-DD"]
+    CFG --> FNAME["filename ←<br>S0 + '_' + S1 + date + '.csv'"]
+    FMT --> FNAME
+
+    FNAME --> OPEN{"SD.open('/' + filename)<br>File exists?"}
+    OPEN -- "Yes" --> DONE["Log: file exists<br>Close file"]
+    OPEN -- "No" --> CREATE["Create file<br>Write CSV header:<br>DateTime, Temperature,<br>Humidity, Pressure, Gas,<br>Altitude, PM1, PM2.5, PM10,<br>… 25 columns total"]
+    CREATE --> CLOSE["Close file"]
+
+    subgraph Side Effects
+        SD[("SD Card<br>(new .csv file)")]
+    end
+    CREATE --> SD

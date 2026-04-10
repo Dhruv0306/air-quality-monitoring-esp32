@@ -1,0 +1,17 @@
+flowchart TD
+    subgraph Inputs
+        NTP["NTP Server<br>(pool.ntp.org)"]
+        CFG["GMT_OFFSET_SEC = 19800<br>(IST +5:30)"]
+    end
+
+    NTP --> CONFIG["configTime(<br>GMT_OFFSET,<br>DAYLIGHT_OFFSET,<br>NTP_SERVER)"]
+    CFG --> CONFIG
+
+    CONFIG --> GET{"getLocalTime(<br>&timeinfo, 10 s)?"}
+    GET -- "Fail" --> FAIL["OLED: 'NTP sync failed'<br>return false"]
+    GET -- "OK" --> OK["OLED: 'Time synced from NTP'<br>return true"]
+
+    subgraph Outputs
+        SYS["ESP32 system clock<br>updated to IST"]
+    end
+    OK --> SYS

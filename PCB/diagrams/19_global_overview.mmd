@@ -1,0 +1,61 @@
+flowchart TB
+    subgraph "Hardware Layer"
+        PMS5003["PMS5003<br>(UART)"]
+        DHT22["DHT22<br>(GPIO 14)"]
+        BME680["BME680<br>(I2C, opt.)"]
+        DS3231["DS3231 RTC<br>(I2C)"]
+        OLED["SSD1306 OLED<br>(I2C)"]
+        SDCARD[("SD Card<br>(SPI)")]
+        WIFI_HW["WiFi Radio"]
+    end
+
+    subgraph "Data Acquisition"
+        readPMS["readPMSSensor()"]
+        readS["readSensors()"]
+        getRTC["getRTCDateTime()<br>getRTCDate()"]
+    end
+
+    subgraph "Processing"
+        calcAQI["calculateAQI()"]
+    end
+
+    subgraph "Output"
+        updDisp["updateDisplay()"]
+        updAQI["updateAQIDisplay()"]
+        logSD["logDataSdCard()"]
+        chkFile["checkFileExists()"]
+    end
+
+    subgraph "Time Management"
+        syncNTP["syncTimeFromNTP()"]
+        syncRTC["syncRTCFromSystemTime()"]
+        maintWiFi["maintainWiFi()"]
+        perSync["periodicNtpSync()"]
+    end
+
+    PMS5003 -->|"PM, particles,<br>temp, humidity, HCHO"| readPMS
+    DHT22 -->|"temperature,<br>humidity"| readS
+    BME680 -->|"pressure, gas,<br>altitude"| readS
+    DS3231 -->|"date & time<br>registers"| getRTC
+
+    readPMS -->|"val1-6, c_*, pms_*"| calcAQI
+    readPMS -->|"val1-6, c_*, pms_*"| logSD
+    readS -->|"temperature,<br>humidity, pressure"| calcAQI
+    readS -->|"temperature,<br>humidity, pressure"| updDisp
+    readS -->|"temperature,<br>humidity, pressure"| logSD
+
+    calcAQI -->|"pm25_aqi, aqi"| updAQI
+    getRTC -->|"dateTime"| updAQI
+    getRTC -->|"dateTime"| logSD
+    getRTC -->|"date"| chkFile
+
+    updDisp -->|"rendered frame"| OLED
+    updAQI -->|"rendered frame"| OLED
+    chkFile -->|"create CSV + header"| SDCARD
+    logSD -->|"append CSV row"| SDCARD
+
+    WIFI_HW <-->|"NTP packets"| syncNTP
+    syncNTP -->|"system clock"| syncRTC
+    syncRTC -->|"set registers"| DS3231
+    maintWiFi -->|"reconnect"| WIFI_HW
+    perSync -->|"trigger"| syncNTP

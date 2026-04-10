@@ -1,0 +1,36 @@
+flowchart LR
+    START(["loop() entry"]) --> MW["maintainWiFi()"]
+    MW --> PNS["periodicNtpSync()"]
+    PNS --> THROTTLE{"millis() − last<br>≥ 1 000 ms?"}
+    THROTTLE -- "No" --> RETURN(["return"])
+    THROTTLE -- "Yes" --> GPS["Set fixed GPS<br>coordinates"]
+
+    GPS --> PMS_CHK{"millis() − lastPmsRead<br>≥ 2 000 ms?"}
+    PMS_CHK -- "Yes" --> PMS_READ["readPMSSensor()"]
+    PMS_CHK -- "No" --> DAY_CHK
+    PMS_READ --> DAY_CHK
+
+    DAY_CHK{"getRTCDate()<br>≠ lastFileDate?"}
+    DAY_CHK -- "Yes" --> NEW_FILE["checkFileExists()<br>lastFileDate ← today"]
+    DAY_CHK -- "No" --> SENSE
+    NEW_FILE --> SENSE
+
+    SENSE["readSensors()"] --> AQI["calculateAQI()"]
+    AQI --> TIME["dateTime ← getRTCDateTime()<br>Date ← getRTCDate()"]
+
+    TIME --> DISP_CHK{"millis() − lastDisplay<br>≥ 3 000 ms?"}
+    DISP_CHK -- "Yes" --> DISP["updateDisplay()"]
+    DISP_CHK -- "No" --> AQI_CHK
+    DISP --> AQI_CHK
+
+    AQI_CHK{"millis() − lastAqiDisp<br>≥ 5 000 ms?"}
+    AQI_CHK -- "Yes" --> AQI_DISP["updateAQIDisplay()"]
+    AQI_CHK -- "No" --> SD_CHK
+    AQI_DISP --> SD_CHK
+
+    SD_CHK{"millis() − lastSDLog<br>≥ 10 000 ms?"}
+    SD_CHK -- "Yes" --> SD_LOG["logDataSdCard()"]
+    SD_CHK -- "No" --> DBG
+    SD_LOG --> DBG
+
+    DBG["Serial.println<br>data cycle info"] --> RETURN

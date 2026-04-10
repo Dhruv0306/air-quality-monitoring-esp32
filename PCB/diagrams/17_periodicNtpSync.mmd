@@ -1,0 +1,21 @@
+flowchart TD
+    START(["periodicNtpSync()"]) --> MIN{"millis() − lastCheck<br>< 60 000 ms?"}
+    MIN -- "Yes" --> RET1(["return (too soon)"])
+    MIN -- "No" --> UPD["lastCheck ← millis()"]
+
+    UPD --> WIFI{"WiFi connected?"}
+    WIFI -- "No" --> RET2(["return"])
+    WIFI -- "Yes" --> TIME["currentTime ← now()"]
+
+    TIME --> VALID{"currentTime<br>> 100 000?"}
+    VALID -- "No" --> RET3(["return (invalid)"])
+    VALID -- "Yes" --> ELAPSED{"currentTime − lastNtpSyncEpoch<br>≥ 86 400 s (24 h)?"}
+
+    ELAPSED -- "No" --> RET4(["return"])
+    ELAPSED -- "Yes" --> SYNC["syncTimeFromNTP()"]
+    SYNC --> OK{"Success?"}
+    OK -- "Yes" --> RTC_SYNC["syncRTCFromSystemTime()"]
+    OK -- "No" --> FAIL["Log: sync failed"]
+
+    RTC_SYNC --> RET5(["return"])
+    FAIL --> RET5

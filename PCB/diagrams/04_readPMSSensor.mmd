@@ -1,0 +1,16 @@
+flowchart TD
+    subgraph HW Input
+        PMS["PMS5003<br>(Serial2: RX2/TX2)"]
+    end
+
+    PMS -->|"poll() + read()"| STD["Standard PM values<br>val1 ← PM1.0 STD<br>val2 ← PM2.5 STD<br>val3 ← PM10 STD"]
+    PMS --> ATM["Atmospheric PM values<br>val4 ← PM1.0 ATM<br>val5 ← PM2.5 ATM<br>val6 ← PM10 ATM"]
+    PMS --> CNT["Particle counts<br>c_300  (>0.3 μm)<br>c_500  (>0.5 μm)<br>c_1000 (>1.0 μm)<br>c_2500 (>2.5 μm)<br>c_5000 (>5.0 μm)<br>c_10000(>10 μm)"]
+    PMS --> ENV["PMS environmental<br>pms_temp ← temperature<br>pms_h ← humidity<br>pms_fld ← formaldehyde"]
+
+    subgraph Global Outputs
+        STD
+        ATM
+        CNT
+        ENV
+    end

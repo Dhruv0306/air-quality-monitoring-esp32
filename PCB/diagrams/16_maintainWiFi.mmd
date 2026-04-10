@@ -1,0 +1,21 @@
+flowchart TD
+    START(["maintainWiFi()"]) --> CHK{"WiFi.status()<br>== WL_CONNECTED?"}
+
+    CHK -- "Yes" --> FIRST{"wifiConnected<br>== false?"}
+    FIRST -- "Yes" --> SET["wifiConnected ← true<br>ntpSyncedThisSession ← false"]
+    FIRST -- "No" --> NTP_CHK
+    SET --> NTP_CHK
+
+    NTP_CHK{"ntpSyncedThisSession<br>== false?"}
+    NTP_CHK -- "Yes" --> NTP["syncTimeFromNTP()<br>syncRTCFromSystemTime()<br>ntpSyncedThisSession ← true"]
+    NTP_CHK -- "No" --> RET(["return"])
+    NTP --> RET
+
+    CHK -- "No" --> DISC["wifiConnected ← false"]
+    DISC --> THROTTLE{"millis() − lastWiFiAttempt<br>< 30 000 ms?"}
+    THROTTLE -- "Yes" --> RET2(["return (throttled)"])
+    THROTTLE -- "No" --> UPD["lastWiFiAttempt ← millis()"]
+    UPD --> SSID{"WL_NO_SSID_AVAIL?"}
+    SSID -- "Yes" --> RET3(["return (no creds)"])
+    SSID -- "No" --> RECONN["WiFi.begin()<br>(non-blocking)"]
+    RECONN --> RET4(["return"])

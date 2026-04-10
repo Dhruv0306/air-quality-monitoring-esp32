@@ -1,0 +1,23 @@
+flowchart LR
+    subgraph HW Inputs
+        DHT["DHT22 sensor<br>(GPIO 14)"]
+        BME["BME680 sensor<br>(I2C, optional)"]
+    end
+
+    DHT -->|"getEvent()"| TEMP["temperature ← event.temperature"]
+    DHT -->|"getEvent()"| HUM["humidity ← event.relative_humidity"]
+
+    BME --> BME_CHK{"bmeAvailable &&<br>bme.performReading()?"}
+    BME_CHK -- "Yes" --> P["pressure ← bme.pressure / 100"]
+    BME_CHK -- "Yes" --> G["gas ← bme.gas_resistance / 1000"]
+    BME_CHK -- "Yes" --> A["altitudeBme ← bme.readAltitude()"]
+    BME_CHK -- "No" --> DEF["pressure ← 9999<br>gas ← 9999<br>altitudeBme ← 9999"]
+
+    subgraph Global Outputs
+        TEMP
+        HUM
+        P
+        G
+        A
+        DEF
+    end

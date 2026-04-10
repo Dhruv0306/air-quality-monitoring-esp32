@@ -1,0 +1,8 @@
+flowchart TD
+    START(["Called on first boot"]) --> CFG["wm.setConfigPortalTimeout(120)<br>wm.setConnectTimeout(5)<br>wm.setDebugOutput(true)"]
+    CFG --> NAME["S_name ← S0 + ' ESP32-Time-Setup'"]
+    NAME --> AP["wm.autoConnect(S_name)<br>Create WiFi hotspot"]
+
+    AP --> RES{"User configured<br>WiFi?"}
+    RES -- "Yes" --> OK["return true<br>(credentials saved to flash)"]
+    RES -- "No / timeout" --> FAIL["return false"]

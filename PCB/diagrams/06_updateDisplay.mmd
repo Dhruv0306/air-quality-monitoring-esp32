@@ -1,0 +1,20 @@
+flowchart LR
+    subgraph Global Inputs
+        S0_["S0 device name"]
+        T["temperature"]
+        H["humidity"]
+        PR["pressure"]
+        V4["val4 (PM1 ATM)"]
+        V5["val5 (PM2.5 ATM)"]
+        V6["val6 (PM10 ATM)"]
+    end
+
+    S0_ --> RENDER
+    T --> RENDER
+    H --> RENDER
+    PR --> RENDER
+    V4 --> RENDER
+    V5 --> RENDER
+    V6 --> RENDER
+
+    RENDER["Format text layout<br>clearDisplay()<br>setTextSize(1)"] --> OLED["OLED SSD1306<br>display.display()"]

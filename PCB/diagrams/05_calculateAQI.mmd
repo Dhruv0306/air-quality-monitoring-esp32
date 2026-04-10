@@ -1,0 +1,14 @@
+flowchart TD
+    IN["val2<br>(PM2.5 STD, μg/m³)"] --> R1{"0 – 30?"}
+    R1 -- "Yes" --> L1["pm25_aqi ← 1<br>aqi ← 'Good'"]
+    R1 -- "No" --> R2{"30 – 60?"}
+    R2 -- "Yes" --> L2["pm25_aqi ← 2<br>aqi ← 'Satisfactory'"]
+    R2 -- "No" --> R3{"60 – 90?"}
+    R3 -- "Yes" --> L3["pm25_aqi ← 3<br>aqi ← 'Moderate'"]
+    R3 -- "No" --> R4{"90 – 120?"}
+    R4 -- "Yes" --> L4["pm25_aqi ← 4<br>aqi ← 'Poor'"]
+    R4 -- "No" --> R5{"120 – 250?"}
+    R5 -- "Yes" --> L5["pm25_aqi ← 5<br>aqi ← 'Very Poor'"]
+    R5 -- "No" --> R6{"≥ 250?"}
+    R6 -- "Yes" --> L6["pm25_aqi ← 6<br>aqi ← 'Severe'"]
+    R6 -- "No" --> ERR["pm25_aqi ← 0<br>aqi ← 'ERROR'"]
