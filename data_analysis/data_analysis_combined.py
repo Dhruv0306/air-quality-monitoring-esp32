@@ -247,10 +247,10 @@ def multi_day_time_series(kitchen_df=None, hall_df=None, bedroom_df=None):
         alpha=0.8,
     )
     plt.axhline(
-        y=25,
+        y=15,
         color=who_guideline_colour,
         linestyle="--",
-        label="WHO 24hr Guideline (25 µg/m³)",
+        label="WHO 24hr Guideline (15 µg/m³)",
         linewidth=3,
     )
     plt.axhline(
@@ -277,17 +277,17 @@ def multi_day_time_series(kitchen_df=None, hall_df=None, bedroom_df=None):
     # Show the plot
     plt.show()
 
-    # Calculate percentage time data > WHO 24hr guidlines (25 µg/m³) per room
-    kitchen_percentage = (kitchen_df_subset["pm2.5atm"] > 25).mean() * 100
-    hall_percentage = (hall_df_subset["pm2.5atm"] > 25).mean() * 100
-    bedroom_percentage = (bedroom_df_subset["pm2.5atm"] > 25).mean() * 100
+    # Calculate percentage time data > WHO 24hr guidlines (15 µg/m³) per room
+    kitchen_percentage = (kitchen_df_subset["pm2.5atm"] > 15).mean() * 100
+    hall_percentage = (hall_df_subset["pm2.5atm"] > 15).mean() * 100
+    bedroom_percentage = (bedroom_df_subset["pm2.5atm"] > 15).mean() * 100
 
     # Calculate percentage time data > India 24hr NAAQS guidlines (60 µg/m³) per room
     kitchen_percentage_india = (kitchen_df_subset["pm2.5atm"] > 60).mean() * 100
     hall_percentage_india = (hall_df_subset["pm2.5atm"] > 60).mean() * 100
     bedroom_percentage_india = (bedroom_df_subset["pm2.5atm"] > 60).mean() * 100
 
-    print(f"Percentage of time PM2.5 > WHO 24hr Guideline (25 µg/m³):")
+    print(f"Percentage of time PM2.5 > WHO 24hr Guideline (15 µg/m³):")
     print(f"  Kitchen: {kitchen_percentage:.2f}%")
     print(f"  Hall: {hall_percentage:.2f}%")
     print(f"  Bedroom: {bedroom_percentage:.2f}%")
@@ -350,10 +350,10 @@ def frequency_analysis(kitchen_df=None, hall_df=None, bedroom_df=None):
 
     # Add vertical guideline lines for WHO and India limits
     plt.axvline(
-        x=25,
+        x=15,
         color=who_guideline_colour,
         linestyle="--",
-        label="WHO 24hr Guideline (25 µg/m³)",
+        label="WHO 24hr Guideline (15 µg/m³)",
         linewidth=2,
     )
     plt.axvline(
@@ -376,14 +376,14 @@ def frequency_analysis(kitchen_df=None, hall_df=None, bedroom_df=None):
     # Mark where the guideline lines meet the x-axis
     y_min, _ = plt.ylim()
     plt.scatter(
-        [25, 60],
+        [15, 60],
         [y_min, y_min],
         c=[who_guideline_colour, india_guideline_colour],
         zorder=5,
     )
     plt.annotate(
-        "25",
-        (25, y_min),
+        "15",
+        (15, y_min),
         textcoords="offset points",
         xytext=(0, -12),
         ha="center",
@@ -409,9 +409,9 @@ def frequency_analysis(kitchen_df=None, hall_df=None, bedroom_df=None):
     # Show the plot
     plt.show()
 
-    # For each room, calculate the percentage of time pm2.5atm was in the following bins: 0-25, 25-60, >60
-    bins = [0, 25, 60, np.inf]
-    labels = ["0-25", "25-60", ">60"]
+    # For each room, calculate the percentage of time pm2.5atm was in the following bins: 0-15, 15-60, >60
+    bins = [0, 15, 60, np.inf]
+    labels = ["0-15", "15-60", ">60"]
     kitchen_bins = pd.cut(kitchen_vals, bins=bins, labels=labels, right=False)
     hall_bins = pd.cut(hall_vals, bins=bins, labels=labels, right=False)
     bedroom_bins = pd.cut(bedroom_vals, bins=bins, labels=labels, right=False)
@@ -617,10 +617,10 @@ def diurnal_pattern(kitchen_df=None, hall_df=None, bedroom_df=None):
 
     # Add horizontal guideline lines for WHO and India limits
     plt.axhline(
-        y=25,
+        y=15,
         color=who_guideline_colour,
         linestyle="--",
-        label="WHO 24hr Guideline (25 µg/m³)",
+        label="WHO 24hr Guideline (15 µg/m³)",
         linewidth=3,
     )
     plt.axhline(
@@ -1162,13 +1162,17 @@ def classify_period_simple(t):
         return "Non-Cooking"
 
 
-def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
+def decay_rate_after_cooking(
+    room_df=None, room_colour=None, room_name=None, room_base_avg=None
+):
     if room_df is None:
         raise ValueError("room_df is None")
     if room_colour is None:
         raise ValueError("room_colour is None")
     if room_name is None:
         raise ValueError("room_name is None")
+    if room_base_avg is None:
+        raise ValueError("room_base_avg is None")
 
     # Keep DateTime index (must be DatetimeIndex for .hour/.date access)
     room_decay_df = room_df[["pm2.5atm"]].copy()
@@ -1181,18 +1185,11 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
 
     # Daily stats (map instead of merge to preserve DateTime index)
     room_daily_avg = room_decay_df.groupby("Date")["pm2.5atm"].mean()
-    daily_baseline = room_decay_df.groupby("Date")[
-        "pm2.5atm"
-    ].mean()  # same as daily avg in current logic
-    baseline_margin = 0.4
+    baseline_margin = 0.2
 
     room_decay_df["DailyAvg"] = room_decay_df["Date"].map(room_daily_avg)
-    room_decay_df["Baseline"] = room_decay_df["Date"].map(daily_baseline)
-
-    baseline_global = room_decay_df.loc[
-        room_decay_df["Period"] == "Non-Cooking", "pm2.5atm"
-    ].mean()
-    room_decay_df["Baseline"] = room_decay_df["Baseline"].fillna(baseline_global)
+    # Baseline is the room-specific diurnal base average
+    room_decay_df["Baseline"] = float(room_base_avg)
 
     # Major spike episodes during cooking
     is_major = (room_decay_df["Period"] == "Cooking") & (
@@ -1206,21 +1203,61 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
     records = []
     max_decay_hours = 12
     min_consecutive_points = 3
+    min_decay_minutes = 10
+    sustained_recovery_minutes = 15
 
     for event_id in room_decay_df["Event ID"].dropna().unique():
         event_data = room_decay_df[room_decay_df["Event ID"] == event_id].sort_index()
         if len(event_data) < 2:
             continue
 
-        max_conc_time = event_data["pm2.5atm"].idxmax()  # Timestamp now
-        max_conc_value = event_data["pm2.5atm"].max()
+        event_end_time = event_data.index.max()
+        tail_window_minutes = 30
+        tail_start_time = max(
+            event_data.index.min(),
+            event_end_time - pd.Timedelta(minutes=tail_window_minutes),
+        )
+        tail_data = event_data.loc[tail_start_time:event_end_time]
+        if tail_data.empty:
+            continue
+
+        # Use a peak near cooking end so the decay phase reflects post-cooking behavior.
+        max_conc_time = tail_data["pm2.5atm"].idxmax()
+        max_conc_value = tail_data["pm2.5atm"].max()
         max_conc_hour = max_conc_time.hour
         max_conc_date = max_conc_time.date()
 
         threshold = event_data["Baseline"].iloc[0] * (1 + baseline_margin)
-        recovery_point = event_data[event_data["pm2.5atm"] <= threshold].index.min()
-        if pd.isna(recovery_point):
-            recovery_point = event_data.index[-1]
+
+        # Search recovery after this cooking event ends and stop at the next
+        # cooking start to avoid mixing multiple cooking episodes.
+        search_window_end = max_conc_time + pd.Timedelta(hours=max_decay_hours)
+        next_cooking_candidates = room_decay_df[
+            (room_decay_df.index > event_end_time)
+            & (room_decay_df["Period"] == "Cooking")
+        ].index
+        if len(next_cooking_candidates) > 0:
+            next_cooking_start = next_cooking_candidates.min()
+            recovery_search_end = min(search_window_end, next_cooking_start)
+        else:
+            recovery_search_end = search_window_end
+
+        post_peak_full = room_decay_df.loc[max_conc_time:recovery_search_end, "pm2.5atm"]
+        if len(post_peak_full) < min_consecutive_points:
+            continue
+
+        below_threshold_mask = post_peak_full <= threshold
+        sustained_points = max(1, int(sustained_recovery_minutes))
+        sustained_below = (
+            below_threshold_mask.rolling(
+                window=sustained_points, min_periods=sustained_points
+            ).sum()
+            == sustained_points
+        )
+        recovery_candidates = sustained_below[sustained_below].index
+        if len(recovery_candidates) == 0:
+            continue
+        recovery_point = recovery_candidates.min()
 
         recovery_hour = recovery_point.hour
         decay_duration = (recovery_point - max_conc_time).total_seconds() / 3600.0
@@ -1228,12 +1265,15 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
         if decay_duration <= 0 or decay_duration > max_decay_hours:
             continue
 
-        post_peak_data = event_data.loc[max_conc_time:]
+        if (decay_duration * 60) < min_decay_minutes:
+            continue
+
+        post_peak_data = post_peak_full.loc[max_conc_time:recovery_point]
         if len(post_peak_data) < min_consecutive_points:
             continue
 
         initial_conc = max_conc_value
-        final_conc = event_data.loc[recovery_point, "pm2.5atm"]
+        final_conc = room_decay_df.loc[recovery_point, "pm2.5atm"]
         if isinstance(final_conc, pd.Series):
             final_conc = final_conc.iloc[0]
         decay_rate = (initial_conc - final_conc) / decay_duration
@@ -1242,9 +1282,11 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
             {
                 "Event ID": event_id,
                 "Date": max_conc_date,
+                "Peak Time": max_conc_time,
                 "Peak Hour": max_conc_hour,
                 "Recovery Hour": recovery_hour,
                 "Recovery Time": recovery_point,
+                "Recovery Threshold": threshold,
                 "Decay Duration (hours)": decay_duration,
                 "Initial Concentration": initial_conc,
                 "Final Concentration": final_conc,
@@ -1270,16 +1312,23 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
         index=False,
     )
 
-    # Representative event: max decay duration
-    rep = decay_df.loc[decay_df["Decay Duration (hours)"].idxmax()]
+    # Representative event: strongest valid peak with valid recovery
+    rep = decay_df.sort_values(
+        by=["Initial Concentration", "Decay Duration (hours)"],
+        ascending=[False, False],
+    ).iloc[0]
 
     # Plot representative event
-    rep_event_id = rep["Event ID"]
-    event_data = room_decay_df[room_decay_df["Event ID"] == rep_event_id].sort_index()
+    peak_time = pd.to_datetime(rep["Peak Time"])
+    if isinstance(peak_time, pd.Series):
+        peak_time = peak_time.iloc[0]
     recovery_time = pd.to_datetime(rep["Recovery Time"])
     if isinstance(recovery_time, pd.Series):
         recovery_time = recovery_time.iloc[0]
-    event_data = event_data.loc[:recovery_time]
+    event_data = room_decay_df.loc[peak_time:recovery_time].sort_index()
+
+    peak_time_num = float(mdates.date2num(peak_time.to_pydatetime()))
+    recovery_time_num = float(mdates.date2num(recovery_time.to_pydatetime()))
 
     plt.figure(figsize=(12, 6))
     plt.plot(
@@ -1313,16 +1362,19 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
     final_concentration = rep["Final Concentration"]
     if isinstance(final_concentration, pd.Series):
         final_concentration = final_concentration.iloc[0]
+    recovery_threshold = rep["Recovery Threshold"]
+    if isinstance(recovery_threshold, pd.Series):
+        recovery_threshold = recovery_threshold.iloc[0]
     plt.axhline(
-        y=float(final_concentration),
+        y=float(f"{final_concentration:.1f}"),
         color="green",
         linestyle="-.",
-        label="Near Baseline Concentration",
+        label="Recovery Threshold",
         alpha=0.6,
     )
     plt.annotate(
         f"Recovery {final_concentration:.1f}",
-        xy=(recovery_time, float(final_concentration)),
+        xy=(recovery_time_num, float(final_concentration)),
         xytext=(3, -15),
         textcoords="offset points",
         arrowprops=dict(arrowstyle="->", color="green"),
@@ -1355,7 +1407,6 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
     if isinstance(decay_rate, pd.Series):
         decay_rate = decay_rate.iloc[0]
 
-    peak_time = event_data["pm2.5atm"].idxmax()
     peak_value = event_data.loc[peak_time, "pm2.5atm"]
     if isinstance(peak_value, pd.Series):
         peak_value = peak_value.iloc[0]
@@ -1365,7 +1416,7 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
         recovery_value = recovery_value.iloc[0]
 
     plt.plot(
-        [peak_time, recovery_time],
+        [peak_time_num, recovery_time_num],
         [float(peak_value), float(recovery_value)],
         color="black",
         linestyle="--",
@@ -1375,10 +1426,11 @@ def decay_rate_after_cooking(room_df=None, room_colour=None, room_name=None):
     )
 
     mid_time = peak_time + (recovery_time - peak_time) / 2
+    mid_time_num = float(mdates.date2num(mid_time.to_pydatetime()))
     mid_value = (float(peak_value) + float(recovery_value)) / 2
     plt.annotate(
         f"Decay Rate: {float(decay_rate):.2f}",
-        xy=(mid_time, mid_value),
+        xy=(mid_time_num, mid_value),
         xytext=(-25, -50),
         textcoords="offset points",
         fontsize=9,
@@ -1472,12 +1524,43 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("Running Decay Rate After Cooking Analysis...")
     print("=" * 80)
-    decay_rate_after_cooking(
-        room_df=kitchen, room_colour=kitchen_colour, room_name="Kitchen"
+    kitchen_decay_df = decay_rate_after_cooking(
+        room_df=kitchen,
+        room_colour=kitchen_colour,
+        room_name="Kitchen",
+        room_base_avg=kitchen_base_avg,
     )
-    decay_rate_after_cooking(room_df=hall, room_colour=hall_colour, room_name="Hall")
-    decay_rate_after_cooking(
-        room_df=bedroom, room_colour=bedroom_colour, room_name="Bedroom"
+    hall_decay_df = decay_rate_after_cooking(
+        room_df=hall,
+        room_colour=hall_colour,
+        room_name="Hall",
+        room_base_avg=hall_base_avg,
+    )
+    bedroom_decay_df = decay_rate_after_cooking(
+        room_df=bedroom,
+        room_colour=bedroom_colour,
+        room_name="Bedroom",
+        room_base_avg=bedroom_base_avg,
+    )
+
+    print(
+        f"Average Decay Rate After Cooking Events - Kitchen: {kitchen_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+    )
+    print(
+        f"Average Decay Rate After Cooking Events - Hall: {hall_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+    )
+    print(
+        f"Average Decay Rate After Cooking Events - Bedroom: {bedroom_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+    )
+
+    print(
+        f"Average Decay Duration After Cooking Events - Kitchen: {kitchen_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+    )
+    print(
+        f"Average Decay Duration After Cooking Events - Hall: {hall_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+    )
+    print(
+        f"Average Decay Duration After Cooking Events - Bedroom: {bedroom_decay_df['Decay Duration (hours)'].mean():.2f} hours"
     )
 
     print("\n" + "=" * 80)
