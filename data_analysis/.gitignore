@@ -1,4 +1,10 @@
 .venv
 __pycache__/
-data/
+data/*
+!data/*/
+data/*/*
+!data/*/Plots/
+!data/*/Plots/**
+!data/Plots/
+!data/Plots/**
 logs/
