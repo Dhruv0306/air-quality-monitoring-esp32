@@ -1,0 +1,87 @@
+flowchart TD
+    classDef startEnd fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef data fill:#dfd,stroke:#333,stroke-width:2px;
+
+    Start([Start Data Processing]) 
+
+    class Start startEnd
+    subgraph Loading["Data Loading"]
+        direction TB
+        DP_K[Dhruv Kitchen Data]
+        DP_H[Dhruv Hall Data]
+        DP_B[Dhruv Bedroom Data]
+        
+        HM_K[Harsh Kitchen Data]
+        HM_H[Harsh Hall Data]
+        HM_B[Harsh Bedroom Data]
+        
+        HB_K[Honeyy Kitchen Data]
+        HB_H[Honeyy Hall Data]
+        HB_B[Honeyy Bedroom Data]
+        
+        PM_K[Parth Kitchen Data]
+        PM_H[Parth Hall Data]
+        PM_B[Parth Bedroom Data]
+        
+        LD_Func[["get_data(roomPath)"]] 
+        
+        class LD_Func process
+    end
+    
+    Start --> LD_Func
+    DP_K & DP_H & DP_B & HM_K & HM_H & HM_B & HB_K & HB_H & HB_B & PM_K & PM_H & PM_B --> LD_Func
+
+    subgraph Cleaning["remove_none_and_average()"]
+        direction TB
+        DropNa["Drop None values"] 
+        class DropNa process
+        DT_Conv["Convert to DateTime"] 
+        class DT_Conv process
+        Set_Idx["Set DateTime as Index"] 
+        class Set_Idx process
+        Resample["Resample to 1min avg"] 
+        class Resample process
+        DropNa --> DT_Conv --> Set_Idx --> Resample
+    end
+
+    LD_Func -->|Raw DataFrames| DropNa
+    
+    subgraph Outliers["remove_outliers_iqr()"]
+        direction TB
+        Filter_K["Filter Kitchen & Hall (pm2.5 <= 1500)"] 
+        class Filter_K process
+        Filter_B["Filter Bedroom (pm2.5 <= 200)"] 
+        class Filter_B process
+    end
+    
+    Resample -->|Cleaned 1min DataFrames| Filter_K
+    Resample -->|Cleaned 1min DataFrames| Filter_B
+    
+    subgraph Combination["Combine & Group"]
+        direction TB
+        Concat_K["Concat Kitchen Data"] 
+        class Concat_K process
+        Concat_H["Concat Hall Data"] 
+        class Concat_H process
+        Concat_B["Concat Bedroom Data"] 
+        class Concat_B process
+        Group_Avg["Group by DateTime & Mean"] 
+        class Group_Avg process
+        Cutoff["Apply Date Cutoff ( > 2025-12-29 )"] 
+        class Cutoff process
+        Concat_K & Concat_H & Concat_B --> Group_Avg --> Cutoff
+    end
+
+    Filter_K --> Concat_K & Concat_H
+    Filter_B --> Concat_B
+    
+    Cutoff --> Final_K[/"Cleaned Kitchen DF"/] 
+    
+    class Cutoff data
+    Cutoff --> Final_H[/"Cleaned Hall DF"/] 
+    class Cutoff data
+    Cutoff --> Final_B[/"Cleaned Bedroom DF"/] 
+    class Cutoff data
+    Final_K & Final_H & Final_B --> End([Ready for Analysis]) 
+    class Final_K startEnd

@@ -1,0 +1,61 @@
+flowchart TD
+    classDef function fill:#f9d0c4,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef output fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef input fill:#ffd700,stroke:#333,stroke-width:2px;
+
+    Start([Start Cooking Contribution Analysis]) 
+
+    class Start function
+    In_DF[/"Room DF & Base Avg"/] 
+    class In_DF input
+    Start --> In_DF
+
+    subgraph Time_Classification["Time Feature Extraction"]
+        direction TB
+        Ext_Time["Extract Time, Date, Hour, Minute"] 
+        class Ext_Time process
+        Classify["Classify Period (Morning, Evening, Non-Cooking)"] 
+        class Classify process
+        Is_Peak["Identify Peak Events (pm2.5 > base_avg)"] 
+        class Is_Peak process
+        Ext_Time --> Classify --> Is_Peak
+    end
+
+    In_DF --> Ext_Time
+
+    subgraph Contribution_Metrics["Calculate Period Metrics"]
+        direction TB
+        Group_Period["Group by Period"] 
+        class Group_Period process
+        Calc_Stats["Calculate Mean, Max, Std dev per Period"] 
+        class Calc_Stats process
+        Sum_Peaks["Sum Peak Frequencies per Period"] 
+        class Sum_Peaks process
+        Sum_Exposure["Sum PM2.5 Exposure Contribution per Period"] 
+        class Sum_Exposure process
+        Calc_Perc["Calculate % Exposure Contribution"] 
+        class Calc_Perc process
+        Calc_P_Hour["Calculate % Exposure / Hour"] 
+        class Calc_P_Hour process
+        Group_Period --> Calc_Stats & Sum_Peaks & Sum_Exposure
+        Sum_Exposure --> Calc_Perc --> Calc_P_Hour
+    end
+
+    Is_Peak --> Group_Period
+
+    subgraph Visual_Output["Output & Plots"]
+        direction TB
+        Print_Stats[/"Print: Period Stats & Frequencies & Exposure"/] 
+        class Print_Stats output
+        Plot_HourlyAvg["Plot Hourly Average PM2.5"] 
+        class Plot_HourlyAvg process
+        Shade_Windows["Highlight Cooking Windows (orange)"] 
+        class Shade_Windows process
+        Save_Plot[/"Save: Diurnal_Cooking_Analysis.png"/] 
+        class Save_Plot output
+        Plot_HourlyAvg --> Shade_Windows --> Save_Plot
+    end
+
+    Calc_Stats & Sum_Peaks & Calc_P_Hour --> Print_Stats
+    Is_Peak --> Plot_HourlyAvg

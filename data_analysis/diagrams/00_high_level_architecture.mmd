@@ -1,0 +1,52 @@
+flowchart TD
+    classDef startEnd fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef pipeline fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef output fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef database fill:#ffd700,stroke:#333,stroke-width:2px;
+
+    StartNode([Start Data Analysis Pipeline])
+
+    subgraph Data_Acquisition ["1. Data Acquisition & Preprocessing"]
+        direction TB
+        Raw_Sensor_Data[("Raw Datasets\n(4 Houses x 3 Rooms)")]
+        PreProcess["Data Filtering & Preprocessing\n- Drop Nulls\n- 1min Averages\n- IQR Outlier Removal"]
+        Combined_Dataset[/"Cleaned & Grouped DataFrame"/]
+        
+        StartNode --> Raw_Sensor_Data
+        Raw_Sensor_Data -->|get_data| PreProcess
+        PreProcess -->|remove_outliers_iqr| Combined_Dataset
+    end
+
+    subgraph Core_Analytics ["2. Core Analytics Engine"]
+        direction TB
+        Combined_Dataset --> TS_Analysis["Multi-Day Time Series\n(multi_day_time_series)"]
+        Combined_Dataset --> Freq_Analysis["Frequency Distribution\n(frequency_analysis)"]
+        Combined_Dataset --> Boxplot_Analysis["Daily Stats Boxplot\n(create_daily_boxplot)"]
+        Combined_Dataset --> Diurnal_Analysis["Diurnal Pattern & Baseline extraction\n(diurnal_pattern)"]
+    end
+
+    subgraph Advanced_Analytics ["3. Advanced Event Analytics"]
+        direction TB
+        Diurnal_Analysis -->|Base Averages| Event_Triggers
+        Combined_Dataset --> Event_Triggers
+        
+        Event_Triggers{"Peak Event Triggers\n(pm2.5 > base_avg)"}
+        
+        Event_Triggers --> Peak_Analysis["Peak Event Profiling\n(peak_event_analysis)"]
+        Event_Triggers --> Cooking_Analysis["Cooking Contribution\n(calculate_y)"]
+        Event_Triggers --> Decay_Analysis["Post-Cooking Decay Rate\n(decay_rate_after_cooking)"]
+    end
+
+    subgraph Reports_Outputs ["4. Visualization & Reports"]
+        direction LR
+        TS_Analysis & Freq_Analysis & Boxplot_Analysis & Diurnal_Analysis --> Base_Plots[/"General Base Plots"/]
+        Peak_Analysis & Cooking_Analysis & Decay_Analysis --> Advanced_Plots[/"Event Analysis Plots & CSVs"/]
+        Peak_Analysis & Cooking_Analysis & Decay_Analysis --> CLI_Stats[/"CLI Terminal Summaries"/]
+    end
+    
+    Reports_Outputs --> EndNode([Pipeline Complete])
+
+    class StartNode,EndNode startEnd
+    class PreProcess,TS_Analysis,Freq_Analysis,Boxplot_Analysis,Diurnal_Analysis,Peak_Analysis,Cooking_Analysis,Decay_Analysis pipeline
+    class Combined_Dataset,Base_Plots,Advanced_Plots,CLI_Stats output
+    class Raw_Sensor_Data database

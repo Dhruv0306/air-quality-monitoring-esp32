@@ -1,0 +1,62 @@
+flowchart TD
+    classDef function fill:#f9d0c4,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef output fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef input fill:#ffd700,stroke:#333,stroke-width:2px;
+
+    Start([Start Daily Boxplot Analysis]) 
+
+    class Start function
+    In_K[/"Cleaned Kitchen DF"/] 
+    class In_K input
+    In_H[/"Cleaned Hall DF"/] 
+    class In_H input
+    In_B[/"Cleaned Bedroom DF"/] 
+    class In_B input
+    Start --> In_K & In_H & In_B
+
+    subgraph Comb_Boxplot["Overall Boxplot"]
+        direction TB
+        Add_Room_K["Add Room='Kitchen'"] 
+        class Add_Room_K process
+        Add_Room_H["Add Room='Hall'"] 
+        class Add_Room_H process
+        Add_Room_B["Add Room='Bedroom'"] 
+        class Add_Room_B process
+        Concat_Rooms["Concat & Plot Overall Boxplot"] 
+        class Concat_Rooms process
+        Save_Overall[/"Save: Boxplot.png"/] 
+        class Save_Overall output
+        Add_Room_K & Add_Room_H & Add_Room_B --> Concat_Rooms --> Save_Overall
+    end
+
+    In_K --> Add_Room_K
+    In_H --> Add_Room_H
+    In_B --> Add_Room_B
+
+    subgraph Daily_Boxplot["Daily Statistical Boxplot"]
+        direction TB
+        Extract_Day_K["Extract Day from DateTime (K)"] 
+        class Extract_Day_K process
+        Extract_Day_H["Extract Day from DateTime (H)"] 
+        class Extract_Day_H process
+        Extract_Day_B["Extract Day from DateTime (B)"] 
+        class Extract_Day_B process
+        Iterate_Rooms["Iterate over Rooms (K, H, B)"] 
+        class Iterate_Rooms process
+        Iterate_Days["Iterate over Days"] 
+        class Iterate_Days process
+        Calc_Stats["Calculate mean, std, cv, max per day"] 
+        class Calc_Stats process
+        Plot_Daily["Plot Boxplot for each room"] 
+        class Plot_Daily process
+        Color_Norm["Apply Color Gradient based on Daily Mean"] 
+        class Color_Norm process
+        Save_Daily[/"Save: Daily_Boxplot_Analysis.png"/] 
+        class Save_Daily output
+        Extract_Day_K & Extract_Day_H & Extract_Day_B --> Iterate_Rooms --> Iterate_Days --> Calc_Stats --> Plot_Daily --> Color_Norm --> Save_Daily
+    end
+
+    In_K --> Extract_Day_K
+    In_H --> Extract_Day_H
+    In_B --> Extract_Day_B

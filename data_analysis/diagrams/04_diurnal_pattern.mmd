@@ -1,0 +1,42 @@
+flowchart TD
+    classDef function fill:#f9d0c4,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef output fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef input fill:#ffd700,stroke:#333,stroke-width:2px;
+
+    Start([Start Diurnal Pattern Analysis]) 
+
+    class Start function
+    In_K[/"Cleaned Kitchen DF"/] 
+    class In_K input
+    In_H[/"Cleaned Hall DF"/] 
+    class In_H input
+    In_B[/"Cleaned Bedroom DF"/] 
+    class In_B input
+    Start --> In_K & In_H & In_B
+
+    subgraph Diurnal_Pattern["diurnal_pattern()"]
+        direction TB
+        Extract_Hour["Extract Hour from DateTime Index"] 
+        class Extract_Hour process
+        Group_Hour["Group by Hour & Calculate Mean"] 
+        class Group_Hour process
+        Print_Base["Print 5am-6am & 4pm-5pm Averages"] 
+        class Print_Base process
+        Calc_Base["Calculate Base Average: (avg(5)+avg(16))/2"] 
+        class Calc_Base process
+        Return_Base[/"Return base averages"/] 
+        class Return_Base output
+        Plot_Diurnal["Plot Hourly Mean vs Hour"] 
+        class Plot_Diurnal process
+        Guidelines_Diurnal["Add WHO (15) & NAAQS (60) Lines"] 
+        class Guidelines_Diurnal process
+        Save_Diurnal[/"Save: Diurnal_Pattern.png"/] 
+        class Save_Diurnal output
+        Extract_Hour --> Group_Hour
+        Group_Hour --> Print_Base & Calc_Base
+        Calc_Base --> Return_Base
+        Group_Hour --> Plot_Diurnal --> Guidelines_Diurnal --> Save_Diurnal
+    end
+
+    In_K & In_H & In_B --> Extract_Hour

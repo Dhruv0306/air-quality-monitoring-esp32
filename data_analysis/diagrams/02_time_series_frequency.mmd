@@ -1,0 +1,60 @@
+flowchart TD
+    classDef function fill:#f9d0c4,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef output fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef input fill:#ffd700,stroke:#333,stroke-width:2px;
+
+    Start([Start Time Series & Frequency Analysis]) 
+
+    class Start function
+    In_K[/"Cleaned Kitchen DF"/] 
+    class In_K input
+    In_H[/"Cleaned Hall DF"/] 
+    class In_H input
+    In_B[/"Cleaned Bedroom DF"/] 
+    class In_B input
+    Start --> In_K & In_H & In_B
+
+    subgraph TimeSeries["multi_day_time_series()"]
+        direction TB
+        Subset_TS["Extract pm2.5atm > 0"] 
+        class Subset_TS process
+        Plot_TS["Plot Time Series (Log Scale)"] 
+        class Plot_TS process
+        Guidelines_TS["Add WHO (15) & NAAQS (60) Lines"] 
+        class Guidelines_TS process
+        Save_TS[/"Save: Multi_Day_Time_Series.png"/] 
+        class Save_TS output
+        Calc_Exceed["Calculate % time > Guidelines"] 
+        class Calc_Exceed process
+        Print_Exceed[/"Print: Exceedance Percentages"/] 
+        class Print_Exceed output
+        Subset_TS --> Plot_TS --> Guidelines_TS --> Save_TS
+        Subset_TS --> Calc_Exceed --> Print_Exceed
+    end
+
+    In_K & In_H & In_B --> Subset_TS
+    
+    subgraph Frequency["frequency_analysis()"]
+        direction TB
+        Round_Int["Round pm2.5atm to integer"] 
+        class Round_Int process
+        Count_Freq["Count value frequencies"] 
+        class Count_Freq process
+        Align_Freq["Align bins across rooms"] 
+        class Align_Freq process
+        Plot_Freq["Plot Frequency Distribution"] 
+        class Plot_Freq process
+        Guidelines_Freq["Add WHO (15) & NAAQS (60) Lines"] 
+        class Guidelines_Freq process
+        Save_Freq[/"Save: Frequency_Distribution.png"/] 
+        class Save_Freq output
+        Bin_Percent["Bin Data: 0-15, 15-60, >60"] 
+        class Bin_Percent process
+        Print_Bin[/"Print: % Time in Bins"/] 
+        class Print_Bin output
+        Round_Int --> Count_Freq --> Align_Freq --> Plot_Freq --> Guidelines_Freq --> Save_Freq
+        Round_Int --> Bin_Percent --> Print_Bin
+    end
+
+    In_K & In_H & In_B --> Round_Int

@@ -1,0 +1,64 @@
+flowchart TD
+    classDef function fill:#f9d0c4,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef output fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef input fill:#ffd700,stroke:#333,stroke-width:2px;
+
+    Start([Start Decay Rate Analysis]) 
+
+    class Start function
+    In_DF[/"Room DF & Base Avg"/] 
+    class In_DF input
+    Start --> In_DF
+
+    subgraph Decay_Event_Detection["Identify Decay Events"]
+        direction TB
+        Classify_S["Classify Period (Cooking vs Non-Cooking)"] 
+        class Classify_S process
+        Calc_Daily_Avg["Calculate Daily Average"] 
+        class Calc_Daily_Avg process
+        Major_Spike["Identify Major Spike (Cooking & pm2.5 > DailyAvg)"] 
+        class Major_Spike process
+        Event_ID["Assign Event IDs to Spikes"] 
+        class Event_ID process
+        Classify_S --> Calc_Daily_Avg --> Major_Spike --> Event_ID
+    end
+
+    In_DF --> Classify_S
+
+    subgraph Decay_Calculation["Decay Iteration & Filtering"]
+        direction TB
+        Iter_Events["Iterate Valid Events"] 
+        class Iter_Events process
+        Find_Peak["Find Peak within Cooking Window Tail"] 
+        class Find_Peak process
+        Set_Threshold["Set Recovery Threshold (Baseline + 20%)"] 
+        class Set_Threshold process
+        Find_Recovery["Find Sustained Recovery (<= Threshold for 15min)"] 
+        class Find_Recovery process
+        Filter_Duration["Filter Valid Duration (10m - 12h)"] 
+        class Filter_Duration process
+        Calc_Rate["Calculate Decay Rate = (Initial - Final) / Duration"] 
+        class Calc_Rate process
+        Iter_Events --> Find_Peak --> Set_Threshold --> Find_Recovery --> Filter_Duration --> Calc_Rate
+    end
+
+    Event_ID --> Iter_Events
+
+    subgraph Representation_Plot["Representative Plot & Export"]
+        direction TB
+        Sort_Best["Sort by Highest Concentration & Duration"] 
+        class Sort_Best process
+        Pick_Rep["Pick Strongest Event (Representative)"] 
+        class Pick_Rep process
+        Plot_Curve["Plot Decay Curve for Event"] 
+        class Plot_Curve process
+        Annotate["Annotate Max, Recovery, Baseline & Rate"] 
+        class Annotate process
+        Save_Decay[/"Save: Decay_Curve.png"/] 
+        class Save_Decay output
+        Save_CSV[/"Save Decay Data to CSV"/] 
+        class Save_CSV output
+        Sort_Best --> Pick_Rep --> Plot_Curve --> Annotate --> Save_Decay
+        Calc_Rate --> Save_CSV & Sort_Best
+    end

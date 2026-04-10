@@ -1,0 +1,75 @@
+flowchart TD
+    classDef function fill:#f9d0c4,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef output fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef input fill:#ffd700,stroke:#333,stroke-width:2px;
+
+    Start([Start Peak Event Analysis]) 
+
+    class Start function
+    In_K[/"Cleaned DF & Base Avg (K)"/] 
+    class In_K input
+    In_H[/"Cleaned DF & Base Avg (H)"/] 
+    class In_H input
+    In_B[/"Cleaned DF & Base Avg (B)"/] 
+    class In_B input
+    Start --> In_K & In_H & In_B
+
+    subgraph Peak_Detection["peak_event_analysis()"]
+        direction TB
+        Identify_Peak["Identify Peak Events (pm2.5 > base_avg)"] 
+        class Identify_Peak process
+        Sort_Date["Sort by DateTime & Extract Date"] 
+        class Sort_Date process
+        Identify_Start["Identify Peak Start (Event = True & Prev = False)"] 
+        class Identify_Start process
+        Assign_ID["Assign Unique Peak ID using cumsum()"] 
+        class Assign_ID process
+        Filter_Events["Filter to Keep Only Peak Events (Event = True)"] 
+        class Filter_Events process
+        Identify_Peak --> Sort_Date --> Identify_Start --> Assign_ID --> Filter_Events
+    end
+
+    In_K & In_H & In_B --> Identify_Peak
+
+    subgraph Peak_Metrics["Calculate Metrics"]
+        direction TB
+        Count_Events["Count Peaks per Day (unique ID)"] 
+        class Count_Events process
+        Reindex_Days["Reindex to include zero-peak days"] 
+        class Reindex_Days process
+        Calc_Duration["Calc Event Duration (max_time - min_time)"] 
+        class Calc_Duration process
+        Calc_Max["Calc Event Max Concentration"] 
+        class Calc_Max process
+        Count_Events --> Reindex_Days
+    end
+
+    Filter_Events --> Count_Events & Calc_Duration & Calc_Max
+
+    subgraph Export_Plots["Export and Save"]
+        direction TB
+        Save_CSV[/"Save Metrics to CSVs"/] 
+        class Save_CSV output
+        Print_Summary[/"Print: Total Peaks, Avg/Max Duration, Conc."/] 
+        class Print_Summary output
+        Plot_Count["Plot: Number of Peak Events per Day"] 
+        class Plot_Count process
+        Save_Count[/"Save: Peak_Events_Per_Day.png"/] 
+        class Save_Count output
+        Plot_Duration["Plot: Avg & Max Duration per Day"] 
+        class Plot_Duration process
+        Save_Duration[/"Save: Peak_Event_Duration_Per_Day.png"/] 
+        class Save_Duration output
+        Plot_Conc["Plot: Avg & Max Concentration per Day"] 
+        class Plot_Conc process
+        Save_Conc[/"Save: Peak_Event_Concentration_Per_Day.png"/] 
+        class Save_Conc output
+        Plot_Count --> Save_Count
+        Plot_Duration --> Save_Duration
+        Plot_Conc --> Save_Conc
+    end
+    
+    Reindex_Days --> Save_CSV & Plot_Count
+    Calc_Duration --> Save_CSV & Print_Summary & Plot_Duration
+    Calc_Max --> Save_CSV & Print_Summary & Plot_Conc
