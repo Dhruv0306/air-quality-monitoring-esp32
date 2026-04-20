@@ -91,7 +91,7 @@ parth_bedroom = get_data(dataset_dic["Parth_Mevada"]["Bedroom"])
 
 
 # ============================================================================
-# Remove None Values and Convert Data to 1 min Average
+# Remove None Values and Convert Data to 1 Hour Average
 # ============================================================================
 def remove_none_and_average(data, name):
     print(f"{name} shape before removing none values: {data.shape}")
@@ -99,17 +99,17 @@ def remove_none_and_average(data, name):
     data = data.dropna()
     print(f"{name} shape after removing none values: {data.shape}")
 
-    print(f"{name} shape before 1min average: {data.shape}")
+    print(f"{name} shape before 30 minute average: {data.shape}")
     # Convert to datetime if not already
     data["DateTime"] = pd.to_datetime(data["DateTime"])
 
     # Set Time as index
     data.set_index("DateTime", inplace=True)
 
-    # Resample to 1 minute averages
-    data = data.resample("1min").mean()
+    # Resample to 30 minute averages
+    data = data.resample("30min").mean()
 
-    print(f"{name} shape after 1min average: {data.shape}")
+    print(f"{name} shape after 30 minute average: {data.shape}")
 
     return data
 
@@ -172,6 +172,7 @@ bedroom_colour = "#377EB8"  # blue
 shaded_area_colour = "#FF7F00"  # orange
 who_guideline_colour = "#984EA3"  # purple
 india_guideline_colour = "#A65628"  # brown
+outdoor_colour = "#999999"  # grey
 
 # ============================================================================
 # Combine All Kitchen, Hall, Bedroom Data and Group by DateTime
@@ -223,7 +224,7 @@ def multi_day_time_series(kitchen_df=None, hall_df=None, bedroom_df=None):
         bedroom_df_subset["pm2.5atm"] > 0
     )
 
-    # Plot the perminute average of `pm2.5atm` for each room in a single plot with WHO and INDIA NAAQS guideline line
+    # Plot the 1-hour average of `pm2.5atm` for each room in a single plot with WHO and INDIA NAAQS guideline line
     plt.figure(figsize=(15, 8))
     plt.plot(
         kitchen_df_subset.index,
@@ -287,15 +288,6 @@ def multi_day_time_series(kitchen_df=None, hall_df=None, bedroom_df=None):
     hall_percentage_india = (hall_df_subset["pm2.5atm"] > 60).mean() * 100
     bedroom_percentage_india = (bedroom_df_subset["pm2.5atm"] > 60).mean() * 100
 
-    print(f"Percentage of time PM2.5 > WHO 24hr Guideline (15 µg/m³):")
-    print(f"  Kitchen: {kitchen_percentage:.2f}%")
-    print(f"  Hall: {hall_percentage:.2f}%")
-    print(f"  Bedroom: {bedroom_percentage:.2f}%")
-    print(f"Percentage of time PM2.5 > India 24hr NAAQS (60 µg/m³):")
-    print(f"  Kitchen: {kitchen_percentage_india:.2f}%")
-    print(f"  Hall: {hall_percentage_india:.2f}%")
-    print(f"  Bedroom: {bedroom_percentage_india:.2f}%")
-
 
 # ============================================================================
 # Frequency Analysis
@@ -348,57 +340,14 @@ def frequency_analysis(kitchen_df=None, hall_df=None, bedroom_df=None):
     plt.xlabel("PM2.5 (µg/m³)")
     plt.ylabel("Frequency (Number of Occurrences)")
 
-    # Add vertical guideline lines for WHO and India limits
-    plt.axvline(
-        x=15,
-        color=who_guideline_colour,
-        linestyle="--",
-        label="WHO 24hr Guideline (15 µg/m³)",
-        linewidth=2,
-    )
-    plt.axvline(
-        x=60,
-        color=india_guideline_colour,
-        linestyle="--",
-        label="India 24hr NAAQS (60 µg/m³)",
-        linewidth=2,
-    )
-
     # Set axis limits and show x-axis ticks every 50 units
-    x_min, x_max = -5, 1200
+    x_min, x_max = 0, int(max(freq_df["pm2.5atm"].max() * 1.1, 100))
     plt.xlim(x_min, x_max)
     plt.xticks(range(0, x_max + 1, 50))
 
     # Set y-axis limits with a little padding
     y_max = max(freq_df[["Kitchen", "Hall", "Bedroom"]].max()) * 1.1
-    plt.ylim(-5, y_max)
-
-    # Mark where the guideline lines meet the x-axis
-    y_min, _ = plt.ylim()
-    plt.scatter(
-        [15, 60],
-        [y_min, y_min],
-        c=[who_guideline_colour, india_guideline_colour],
-        zorder=5,
-    )
-    plt.annotate(
-        "15",
-        (15, y_min),
-        textcoords="offset points",
-        xytext=(0, -12),
-        ha="center",
-        va="bottom",
-        color=who_guideline_colour,
-    )
-    plt.annotate(
-        "60",
-        (60, y_min),
-        textcoords="offset points",
-        xytext=(0, -12),
-        ha="center",
-        va="bottom",
-        color=india_guideline_colour,
-    )
+    plt.ylim(0, y_max)
 
     plt.title("Frequency Distribution of PM2.5")
     plt.legend()
@@ -453,8 +402,8 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
         ]
     )
 
-    plt.figure(figsize=(10, 6))
-    sns.boxplot(
+    plt.figure(figsize=(12, 8))
+    ax = sns.boxplot(
         x="Room",
         y="pm2.5atm",
         hue="Room",
@@ -462,12 +411,40 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
         palette=[kitchen_colour, hall_colour, bedroom_colour],
         legend=False,
     )
+
+    # Add average lines for each room (full width)
+    room_averages = combined_df.groupby("Room")["pm2.5atm"].mean()
+    room_positions = {"Kitchen": 0, "Hall": 1, "Bedroom": 2}
+    room_colors = {
+        "Kitchen": kitchen_colour,
+        "Hall": hall_colour,
+        "Bedroom": bedroom_colour,
+    }
+
+    for room, avg_val in room_averages.items():
+        pos = room_positions[room]
+        color = room_colors[room]
+        # ax.plot([pos - 0.4, pos + 0.4], [avg_val, avg_val], color=color, linestyle="--", linewidth=3, label=f"{room} Avg: {avg_val:.1f}")
+
+    # Add lines showing average PM2.5 values for each room with labels
+    for i, (room, avg_val) in enumerate(room_averages.items()):
+        plt.axhline(
+            y=avg_val,
+            color=room_colors[room],
+            linestyle="--",
+            linewidth=3,
+            label=f"{room} Avg: {avg_val:.1f}",
+        )
     plt.yscale("log")
-    plt.ylabel("PM2.5 (µg/m³, log scale)")
-    plt.title("Daily Boxplot of PM2.5 by Room")
+    plt.ylabel("PM2.5 (µg/m³, log scale)", fontsize=14, fontweight="bold")
+    plt.xlabel("Room", fontsize=14, fontweight="bold")
+    plt.title("Combined Daily Boxplot of PM2.5 by Room", fontsize=16, fontweight="bold")
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.legend(fontsize=11, loc="upper right")
     # Save the plot
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOT_DIR, "Boxplot.png"))
+    plt.savefig(os.path.join(PLOT_DIR, "Boxplot_Combined.png"))
     # Show the plot
     plt.show()
 
@@ -482,19 +459,23 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
 
     # Store the dataframes in a dictionary for easy access
     room_dataframes = {
+        "Kitchen": kitchen_daily,
         "Hall": hall_daily,
         "Bedroom": bedroom_daily,
-        "Kitchen": kitchen_daily,
+    }
+    room_colors = {
+        "Kitchen": kitchen_colour,
+        "Hall": hall_colour,
+        "Bedroom": bedroom_colour,
     }
     rooms = ["Kitchen", "Hall", "Bedroom"]
 
-    fig, axes = plt.subplots(1, 3, figsize=(40, 10), sharey=True)
-
-    for idx, room in enumerate(rooms):
+    # Create separate plots for each room
+    for room in rooms:
         # Get data for current room from the corresponding dataframe
         room_data = room_dataframes[room]
 
-        # Main boxplot (top subplot)
+        # Main boxplot
         daily_data = []
         day_labels = []
         daily_stats = []
@@ -514,8 +495,11 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
                     }
                 )
 
-        # Create main boxplot
-        bp = axes[idx].boxplot(daily_data, tick_labels=day_labels, patch_artist=True)
+        # Create separate figure for each room
+        fig, ax = plt.subplots(figsize=(16, 10))
+        bp = ax.boxplot(
+            daily_data, tick_labels=day_labels, patch_artist=True, widths=0.6
+        )
 
         # Color boxes based on daily mean (gradient from low to high)
         daily_means = [stats["mean"] for stats in daily_stats]
@@ -526,20 +510,36 @@ def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
             for patch, mean_val in zip(bp["boxes"], daily_means):
                 patch.set_facecolor(cmap(norm(mean_val)))
                 patch.set_alpha(0.8)
+                patch.set_linewidth(2)
 
-        axes[idx].set_title(f"{room} - Daily PM2.5 Distribution", fontweight="bold")
-        axes[idx].set_xlabel("Day")
-        axes[idx].set_ylabel("PM2.5 (µg/m³, log scale)" if idx == 0 else "")
-        axes[idx].set_yscale("log")
-        axes[idx].grid(True, alpha=0.3, which="both")
+        # Increase whisker and median line widths
+        for whisker in bp["whiskers"]:
+            whisker.set_linewidth(2)
+        for cap in bp["caps"]:
+            cap.set_linewidth(2)
+        for median in bp["medians"]:
+            median.set_linewidth(3)
+            median.set_color(room_colors[room])
 
-    fig.suptitle("Comprehensive Daily PM2.5 Analysis", fontsize=16, fontweight="bold")
-    fig.tight_layout()
-    fig.subplots_adjust(top=0.88)
-    # Save the plot
-    fig.savefig(os.path.join(PLOT_DIR, "Daily_Boxplot_Analysis.png"))
-    # Show the plot
-    plt.show()
+        ax.set_title(
+            f"{room} - Daily PM2.5 Distribution", fontweight="bold", fontsize=18
+        )
+        ax.set_xlabel("Day", fontsize=16, fontweight="bold")
+        ax.set_ylabel("PM2.5 (µg/m³, log scale)", fontsize=16, fontweight="bold")
+        ax.set_yscale("log")
+        ax.grid(True, alpha=0.3, which="both")
+        ax.tick_params(axis="x", labelsize=13)
+        ax.tick_params(axis="y", labelsize=13)
+
+        fig.tight_layout()
+        # Save the plot
+        fig.savefig(
+            os.path.join(PLOT_DIR, f"Daily_Boxplot_{room}.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        # Show the plot
+        plt.show()
 
 
 # ============================================================================
@@ -613,22 +613,6 @@ def diurnal_pattern(kitchen_df=None, hall_df=None, bedroom_df=None):
         color=bedroom_colour,
         label="Bedroom",
         alpha=0.8,
-    )
-
-    # Add horizontal guideline lines for WHO and India limits
-    plt.axhline(
-        y=15,
-        color=who_guideline_colour,
-        linestyle="--",
-        label="WHO 24hr Guideline (15 µg/m³)",
-        linewidth=3,
-    )
-    plt.axhline(
-        y=60,
-        color=india_guideline_colour,
-        linestyle="--",
-        label="India 24hr NAAQS (60 µg/m³)",
-        linewidth=3,
     )
     plt.xlabel("Hour of the Day")
     plt.xticks(range(0, 24, 1))
@@ -1148,6 +1132,164 @@ def calculate_cooking_related_PM2_5_contribution_analysis(
 
 
 # ============================================================================
+# 24-Hour Average Analysis (WHO & NAAQS Guidelines Comparison)
+# ============================================================================
+def daily_average_guideline_comparison(kitchen_df=None, hall_df=None, bedroom_df=None):
+    if kitchen_df is None:
+        raise ValueError("kitchen_df is None")
+    if hall_df is None:
+        raise ValueError("hall_df is None")
+    if bedroom_df is None:
+        raise ValueError("bedroom_df is None")
+
+    # Calculate 24-hour daily averages for each room
+    kitchen_daily_avg = kitchen_df.resample("D")["pm2.5atm"].mean()
+    hall_daily_avg = hall_df.resample("D")["pm2.5atm"].mean()
+    bedroom_daily_avg = bedroom_df.resample("D")["pm2.5atm"].mean()
+
+    # WHO 24hr Guideline: 15 µg/m³
+    # India 24hr NAAQS: 60 µg/m³
+    who_guideline = 15
+    naaqs_guideline = 60
+
+    # Calculate percentage of days exceeding each guideline
+    kitchen_who_pct = (kitchen_daily_avg > who_guideline).mean() * 100
+    kitchen_naaqs_pct = (kitchen_daily_avg > naaqs_guideline).mean() * 100
+
+    hall_who_pct = (hall_daily_avg > who_guideline).mean() * 100
+    hall_naaqs_pct = (hall_daily_avg > naaqs_guideline).mean() * 100
+
+    bedroom_who_pct = (bedroom_daily_avg > who_guideline).mean() * 100
+    bedroom_naaqs_pct = (bedroom_daily_avg > naaqs_guideline).mean() * 100
+
+    # Print results
+    print("\n" + "=" * 80)
+    print("24-Hour Average Daily Analysis - WHO & NAAQS Guidelines Comparison")
+    print("=" * 80)
+    print("\nDaily Average Statistics (µg/m³):")
+    print(f"\nKitchen:")
+    print(f"  Mean Daily Average: {kitchen_daily_avg.mean():.2f}")
+    print(f"  Min Daily Average: {kitchen_daily_avg.min():.2f}")
+    print(f"  Max Daily Average: {kitchen_daily_avg.max():.2f}")
+    print(f"  Std Dev: {kitchen_daily_avg.std():.2f}")
+    print(f"  % Days > WHO Guideline (15 µg/m³): {kitchen_who_pct:.2f}%")
+    print(f"  % Days > NAAQS Guideline (60 µg/m³): {kitchen_naaqs_pct:.2f}%")
+
+    print(f"\nHall:")
+    print(f"  Mean Daily Average: {hall_daily_avg.mean():.2f}")
+    print(f"  Min Daily Average: {hall_daily_avg.min():.2f}")
+    print(f"  Max Daily Average: {hall_daily_avg.max():.2f}")
+    print(f"  Std Dev: {hall_daily_avg.std():.2f}")
+    print(f"  % Days > WHO Guideline (15 µg/m³): {hall_who_pct:.2f}%")
+    print(f"  % Days > NAAQS Guideline (60 µg/m³): {hall_naaqs_pct:.2f}%")
+
+    print(f"\nBedroom:")
+    print(f"  Mean Daily Average: {bedroom_daily_avg.mean():.2f}")
+    print(f"  Min Daily Average: {bedroom_daily_avg.min():.2f}")
+    print(f"  Max Daily Average: {bedroom_daily_avg.max():.2f}")
+    print(f"  Std Dev: {bedroom_daily_avg.std():.2f}")
+    print(f"  % Days > WHO Guideline (15 µg/m³): {bedroom_who_pct:.2f}%")
+    print(f"  % Days > NAAQS Guideline (60 µg/m³): {bedroom_naaqs_pct:.2f}%")
+
+    # Create comparison plot
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    rooms = ["Kitchen", "Hall", "Bedroom"]
+    who_percentages = [kitchen_who_pct, hall_who_pct, bedroom_who_pct]
+    naaqs_percentages = [kitchen_naaqs_pct, hall_naaqs_pct, bedroom_naaqs_pct]
+    room_colors_list = [kitchen_colour, hall_colour, bedroom_colour]
+
+    x = np.arange(len(rooms))
+    width = 0.35
+
+    bars1 = ax.bar(
+        x - width / 2,
+        who_percentages,
+        width,
+        label="WHO Guideline (15 µg/m³)",
+        alpha=0.8,
+        color="#984EA3",
+    )
+    bars2 = ax.bar(
+        x + width / 2,
+        naaqs_percentages,
+        width,
+        label="NAAQS Guideline (60 µg/m³)",
+        alpha=0.8,
+        color="#A65628",
+    )
+
+    ax.set_xlabel("Room", fontsize=14, fontweight="bold")
+    ax.set_ylabel("% of Days Exceeding Guideline", fontsize=14, fontweight="bold")
+    ax.set_title(
+        "Daily Average PM2.5: % Days Exceeding WHO & NAAQS Guidelines",
+        fontsize=16,
+        fontweight="bold",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(rooms, fontsize=12)
+    ax.legend(fontsize=12)
+    ax.tick_params(axis="y", labelsize=12)
+    ax.grid(axis="y", alpha=0.3)
+
+    # Add value labels on bars
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                height,
+                f"{height:.1f}%",
+                ha="center",
+                va="bottom",
+                fontsize=11,
+                fontweight="bold",
+            )
+
+    fig.tight_layout()
+    fig.savefig(
+        os.path.join(PLOT_DIR, "Daily_Average_Guideline_Comparison.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.show()
+
+    # Create a summary dataframe and save to CSV
+    summary_df = pd.DataFrame(
+        {
+            "Room": rooms,
+            "Mean Daily Avg (µg/m³)": [
+                kitchen_daily_avg.mean(),
+                hall_daily_avg.mean(),
+                bedroom_daily_avg.mean(),
+            ],
+            "Min Daily Avg (µg/m³)": [
+                kitchen_daily_avg.min(),
+                hall_daily_avg.min(),
+                bedroom_daily_avg.min(),
+            ],
+            "Max Daily Avg (µg/m³)": [
+                kitchen_daily_avg.max(),
+                hall_daily_avg.max(),
+                bedroom_daily_avg.max(),
+            ],
+            "Std Dev (µg/m³)": [
+                kitchen_daily_avg.std(),
+                hall_daily_avg.std(),
+                bedroom_daily_avg.std(),
+            ],
+            "% Days > WHO (15 µg/m³)": who_percentages,
+            "% Days > NAAQS (60 µg/m³)": naaqs_percentages,
+        }
+    )
+
+    summary_df.to_csv(
+        os.path.join(PLOT_DIR, "Daily_Average_Guideline_Summary.csv"), index=False
+    )
+    print("\nSummary saved to: Daily_Average_Guideline_Summary.csv")
+
+
+# ============================================================================
 # Decay Rate After Cooking (Ventilation Efficiency Proxy)
 # ============================================================================
 def classify_period_simple(t):
@@ -1174,24 +1316,19 @@ def decay_rate_after_cooking(
     if room_base_avg is None:
         raise ValueError("room_base_avg is None")
 
-    # Keep DateTime index (must be DatetimeIndex for .hour/.date access)
     room_decay_df = room_df[["pm2.5atm"]].copy()
     room_decay_df.index = pd.to_datetime(room_decay_df.index)
 
-    # Basic time features
     room_decay_df["Date"] = room_decay_df.index.date
     room_decay_df["Time"] = room_decay_df.index.time
     room_decay_df["Period"] = room_decay_df["Time"].apply(classify_period_simple)
 
-    # Daily stats (map instead of merge to preserve DateTime index)
     room_daily_avg = room_decay_df.groupby("Date")["pm2.5atm"].mean()
     baseline_margin = 0.2
 
     room_decay_df["DailyAvg"] = room_decay_df["Date"].map(room_daily_avg)
-    # Baseline is the room-specific diurnal base average
     room_decay_df["Baseline"] = float(room_base_avg)
 
-    # Major spike episodes during cooking
     is_major = (room_decay_df["Period"] == "Cooking") & (
         room_decay_df["pm2.5atm"] > room_decay_df["DailyAvg"]
     )
@@ -1199,7 +1336,6 @@ def decay_rate_after_cooking(
     room_decay_df["Event ID"] = start_of_event.cumsum()
     room_decay_df.loc[~is_major, "Event ID"] = np.nan
 
-    # Compute decay metrics
     records = []
     max_decay_hours = 12
     min_consecutive_points = 3
@@ -1212,25 +1348,17 @@ def decay_rate_after_cooking(
             continue
 
         event_end_time = event_data.index.max()
-        tail_window_minutes = 30
-        tail_start_time = max(
-            event_data.index.min(),
-            event_end_time - pd.Timedelta(minutes=tail_window_minutes),
-        )
-        tail_data = event_data.loc[tail_start_time:event_end_time]
-        if tail_data.empty:
-            continue
 
-        # Use a peak near cooking end so the decay phase reflects post-cooking behavior.
-        max_conc_time = tail_data["pm2.5atm"].idxmax()
-        max_conc_value = tail_data["pm2.5atm"].max()
+        # Use the overall event maximum as the peak — this is the true start of decay,
+        # not a tail-window anchor. The tail window approach was causing the peak to be
+        # misidentified as the first point of the plot window.
+        max_conc_time = event_data["pm2.5atm"].idxmax()
+        max_conc_value = float(event_data["pm2.5atm"].max())
         max_conc_hour = max_conc_time.hour
         max_conc_date = max_conc_time.date()
 
-        threshold = event_data["Baseline"].iloc[0] * (1 + baseline_margin)
+        threshold = float(event_data["Baseline"].iloc[0]) * (1 + baseline_margin)
 
-        # Search recovery after this cooking event ends and stop at the next
-        # cooking start to avoid mixing multiple cooking episodes.
         search_window_end = max_conc_time + pd.Timedelta(hours=max_decay_hours)
         next_cooking_candidates = room_decay_df[
             (room_decay_df.index > event_end_time)
@@ -1242,12 +1370,22 @@ def decay_rate_after_cooking(
         else:
             recovery_search_end = search_window_end
 
-        post_peak_full = room_decay_df.loc[max_conc_time:recovery_search_end, "pm2.5atm"]
+        # Slice from the true peak onwards for recovery search
+        post_peak_full = room_decay_df.loc[
+            max_conc_time:recovery_search_end, "pm2.5atm"
+        ]
         if len(post_peak_full) < min_consecutive_points:
             continue
 
+        if len(post_peak_full) > 1:
+            minutes_per_row = (
+                post_peak_full.index[1] - post_peak_full.index[0]
+            ).total_seconds() / 60.0
+        else:
+            minutes_per_row = 30.0
+        sustained_points = max(1, round(sustained_recovery_minutes / minutes_per_row))
+
         below_threshold_mask = post_peak_full <= threshold
-        sustained_points = max(1, int(sustained_recovery_minutes))
         sustained_below = (
             below_threshold_mask.rolling(
                 window=sustained_points, min_periods=sustained_points
@@ -1257,14 +1395,15 @@ def decay_rate_after_cooking(
         recovery_candidates = sustained_below[sustained_below].index
         if len(recovery_candidates) == 0:
             continue
-        recovery_point = recovery_candidates.min()
+        window_end_idx = post_peak_full.index.get_loc(recovery_candidates.min())
+        recovery_start_idx = max(0, window_end_idx - (sustained_points - 1))
+        recovery_point = post_peak_full.index[recovery_start_idx]
 
         recovery_hour = recovery_point.hour
         decay_duration = (recovery_point - max_conc_time).total_seconds() / 3600.0
 
         if decay_duration <= 0 or decay_duration > max_decay_hours:
             continue
-
         if (decay_duration * 60) < min_decay_minutes:
             continue
 
@@ -1273,10 +1412,9 @@ def decay_rate_after_cooking(
             continue
 
         initial_conc = max_conc_value
-        final_conc = room_decay_df.loc[recovery_point, "pm2.5atm"]
-        if isinstance(final_conc, pd.Series):
-            final_conc = final_conc.iloc[0]
-        decay_rate = (initial_conc - final_conc) / decay_duration
+        final_conc = float(post_peak_data.iloc[-1])
+        decay_rate_per_hour = (initial_conc - final_conc) / decay_duration
+        decay_rate_per_minute = decay_rate_per_hour / 60.0
 
         records.append(
             {
@@ -1290,7 +1428,8 @@ def decay_rate_after_cooking(
                 "Decay Duration (hours)": decay_duration,
                 "Initial Concentration": initial_conc,
                 "Final Concentration": final_conc,
-                "Decay Rate (µg/m³/hour)": decay_rate,
+                "Decay Rate (µg/m³/hour)": decay_rate_per_hour,
+                "Decay Rate (µg/m³/minute)": decay_rate_per_minute,
             }
         )
 
@@ -1312,23 +1451,26 @@ def decay_rate_after_cooking(
         index=False,
     )
 
-    # Representative event: strongest valid peak with valid recovery
     rep = decay_df.sort_values(
         by=["Initial Concentration", "Decay Duration (hours)"],
         ascending=[False, False],
     ).iloc[0]
 
-    # Plot representative event
+    # Extract scalars from rep — no .loc lookups needed anywhere in plotting
     peak_time = pd.to_datetime(rep["Peak Time"])
-    if isinstance(peak_time, pd.Series):
-        peak_time = peak_time.iloc[0]
     recovery_time = pd.to_datetime(rep["Recovery Time"])
-    if isinstance(recovery_time, pd.Series):
-        recovery_time = recovery_time.iloc[0]
-    event_data = room_decay_df.loc[peak_time:recovery_time].sort_index()
+    initial_concentration = float(rep["Initial Concentration"])
+    final_concentration = float(rep["Final Concentration"])
+    recovery_threshold = float(rep["Recovery Threshold"])
+    decay_rate_per_hour = float(rep["Decay Rate (µg/m³/hour)"])
+    decay_rate_per_minute = float(rep["Decay Rate (µg/m³/minute)"])
+    peak_hour = int(rep["Peak Hour"])
 
-    peak_time_num = float(mdates.date2num(peak_time.to_pydatetime()))
-    recovery_time_num = float(mdates.date2num(recovery_time.to_pydatetime()))
+    # Plot window: start slightly before peak so the rise context is visible,
+    # end at recovery. This ensures peak_time sits inside the window, not at its edge.
+    plot_start = peak_time - pd.Timedelta(minutes=30)
+    event_data = room_decay_df.loc[plot_start:recovery_time].sort_index()
+    baseline_concentration = float(event_data["Baseline"].iloc[0])
 
     plt.figure(figsize=(12, 6))
     plt.plot(
@@ -1339,19 +1481,18 @@ def decay_rate_after_cooking(
         color=room_colour,
         alpha=0.8,
     )
-    initial_concentration = rep["Initial Concentration"]
-    if isinstance(initial_concentration, pd.Series):
-        initial_concentration = initial_concentration.iloc[0]
+
+    # Max Concentration line — drawn at the true peak value
     plt.axhline(
-        y=float(initial_concentration),
+        y=initial_concentration,
         color="red",
         linestyle="-.",
-        label="Max Concentration",
+        label=f"Max Concentration ({initial_concentration:.1f} µg/m³)",
         alpha=0.6,
     )
     plt.annotate(
         f"Peak {initial_concentration:.1f}",
-        xy=(event_data["pm2.5atm"].idxmax(), event_data["pm2.5atm"].max()),
+        xy=(peak_time, initial_concentration),
         xytext=(3, 5),
         textcoords="offset points",
         arrowprops=dict(arrowstyle="->", color="red"),
@@ -1359,22 +1500,17 @@ def decay_rate_after_cooking(
         color="red",
     )
 
-    final_concentration = rep["Final Concentration"]
-    if isinstance(final_concentration, pd.Series):
-        final_concentration = final_concentration.iloc[0]
-    recovery_threshold = rep["Recovery Threshold"]
-    if isinstance(recovery_threshold, pd.Series):
-        recovery_threshold = recovery_threshold.iloc[0]
+    # Recovery threshold line
     plt.axhline(
-        y=float(f"{final_concentration:.1f}"),
+        y=final_concentration,
         color="green",
         linestyle="-.",
-        label="Recovery Threshold",
+        label=f"Recovery ({final_concentration:.1f} µg/m³)",
         alpha=0.6,
     )
     plt.annotate(
         f"Recovery {final_concentration:.1f}",
-        xy=(recovery_time_num, float(final_concentration)),
+        xy=(recovery_time, final_concentration),
         xytext=(3, -15),
         textcoords="offset points",
         arrowprops=dict(arrowstyle="->", color="green"),
@@ -1382,19 +1518,17 @@ def decay_rate_after_cooking(
         color="green",
     )
 
-    baseline_concentration = event_data["Baseline"].iloc[0]
-    if isinstance(baseline_concentration, pd.Series):
-        baseline_concentration = baseline_concentration.iloc[0]
+    # Baseline line
     plt.axhline(
-        y=float(baseline_concentration),
+        y=baseline_concentration,
         color="blue",
         linestyle="-.",
-        label="Baseline Concentration",
+        label=f"Baseline ({baseline_concentration:.1f} µg/m³)",
         alpha=0.6,
     )
     plt.annotate(
         f"Baseline {baseline_concentration:.1f}",
-        xy=(event_data.index[0], event_data["Baseline"].iloc[0]),
+        xy=(event_data.index[0], baseline_concentration),
         xytext=(3, -15),
         textcoords="offset points",
         arrowprops=dict(arrowstyle="->", color="blue"),
@@ -1402,35 +1536,22 @@ def decay_rate_after_cooking(
         color="blue",
     )
 
-    # Decay Rate Annotation
-    decay_rate = rep["Decay Rate (µg/m³/hour)"]
-    if isinstance(decay_rate, pd.Series):
-        decay_rate = decay_rate.iloc[0]
-
-    peak_value = event_data.loc[peak_time, "pm2.5atm"]
-    if isinstance(peak_value, pd.Series):
-        peak_value = peak_value.iloc[0]
-
-    recovery_value = event_data.loc[recovery_time, "pm2.5atm"]
-    if isinstance(recovery_value, pd.Series):
-        recovery_value = recovery_value.iloc[0]
-
+    # Decay slope line — from true peak to recovery point, both as datetimes
     plt.plot(
-        [peak_time_num, recovery_time_num],
-        [float(peak_value), float(recovery_value)],
+        [peak_time, recovery_time],
+        [initial_concentration, final_concentration],
         color="black",
         linestyle="--",
         linewidth=1.5,
-        label=f"Decay Rate: {float(decay_rate):.2f} µg/m³/hour",
+        label=f"Decay Rate: {decay_rate_per_hour:.2f} µg/m³/hour, {decay_rate_per_minute:.2f} µg/m³/minute",
         alpha=0.7,
     )
 
     mid_time = peak_time + (recovery_time - peak_time) / 2
-    mid_time_num = float(mdates.date2num(mid_time.to_pydatetime()))
-    mid_value = (float(peak_value) + float(recovery_value)) / 2
+    mid_value = (initial_concentration + final_concentration) / 2
     plt.annotate(
-        f"Decay Rate: {float(decay_rate):.2f}",
-        xy=(mid_time_num, mid_value),
+        f"Decay Rate: {decay_rate_per_hour:.2f} µg/m³/hour\n{decay_rate_per_minute:.2f} µg/m³/minute",
+        xy=(mid_time, mid_value),
         xytext=(-25, -50),
         textcoords="offset points",
         fontsize=9,
@@ -1439,17 +1560,18 @@ def decay_rate_after_cooking(
         rotation=-35,
     )
 
-    peak_hour = rep["Peak Hour"]
-    if isinstance(peak_hour, pd.Series):
-        peak_hour = peak_hour.iloc[0]
     plt.title(
-        f"Decay Curve After Cooking Event on {rep['Date']} (Peak Hour: {int(peak_hour)}) (Duration: {rep['Decay Duration (hours)']:.2f} hours, Decay Rate: {rep['Decay Rate (µg/m³/hour)']:.2f})",
+        f"Decay Curve After Cooking Event on {rep['Date']} "
+        f"(Peak Hour: {peak_hour}) "
+        f"(Duration: {rep['Decay Duration (hours)']:.2f} hours, "
+        f"Decay Rate: {decay_rate_per_hour:.2f} µg/m³/hour, {decay_rate_per_minute:.2f} µg/m³/minute)",
         fontweight="bold",
     )
     plt.xlabel("Time")
     plt.ylabel("PM2.5 Concentration (µg/m³)")
     plt.legend()
     plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Decay_Rate_Analysis"), exist_ok=True)
     plt.savefig(
         os.path.join(PLOT_DIR, "Decay_Rate_Analysis", f"{room_name}_Decay_Curve.png"),
         dpi=600,
@@ -1500,6 +1622,13 @@ if __name__ == "__main__":
     )
 
     print("\n" + "=" * 80)
+    print("Running Daily Average Guideline Comparison Analysis...")
+    print("=" * 80)
+    daily_average_guideline_comparison(
+        kitchen_df=kitchen, hall_df=hall, bedroom_df=bedroom
+    )
+
+    print("\n" + "=" * 80)
     print("Running Cooking-Related PM2.5 Contribution Analysis...")
     print("=" * 80)
     calculate_cooking_related_PM2_5_contribution_analysis(
@@ -1543,25 +1672,42 @@ if __name__ == "__main__":
         room_base_avg=bedroom_base_avg,
     )
 
-    print(
-        f"Average Decay Rate After Cooking Events - Kitchen: {kitchen_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
-    )
-    print(
-        f"Average Decay Rate After Cooking Events - Hall: {hall_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
-    )
-    print(
-        f"Average Decay Rate After Cooking Events - Bedroom: {bedroom_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
-    )
+    # Only print decay rates if data is available
+    if not kitchen_decay_df.empty:
+        print(
+            f"Average Decay Rate After Cooking Events - Kitchen: {kitchen_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+        )
+        print(
+            f"Average Decay Duration After Cooking Events - Kitchen: {kitchen_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+        )
+    else:
+        print(
+            "Average Decay Rate After Cooking Events - Kitchen: No valid decay events found."
+        )
 
-    print(
-        f"Average Decay Duration After Cooking Events - Kitchen: {kitchen_decay_df['Decay Duration (hours)'].mean():.2f} hours"
-    )
-    print(
-        f"Average Decay Duration After Cooking Events - Hall: {hall_decay_df['Decay Duration (hours)'].mean():.2f} hours"
-    )
-    print(
-        f"Average Decay Duration After Cooking Events - Bedroom: {bedroom_decay_df['Decay Duration (hours)'].mean():.2f} hours"
-    )
+    if not hall_decay_df.empty:
+        print(
+            f"Average Decay Rate After Cooking Events - Hall: {hall_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+        )
+        print(
+            f"Average Decay Duration After Cooking Events - Hall: {hall_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+        )
+    else:
+        print(
+            "Average Decay Rate After Cooking Events - Hall: No valid decay events found."
+        )
+
+    if not bedroom_decay_df.empty:
+        print(
+            f"Average Decay Rate After Cooking Events - Bedroom: {bedroom_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+        )
+        print(
+            f"Average Decay Duration After Cooking Events - Bedroom: {bedroom_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+        )
+    else:
+        print(
+            "Average Decay Rate After Cooking Events - Bedroom: No valid decay events found."
+        )
 
     print("\n" + "=" * 80)
     print("All analyses completed successfully!")

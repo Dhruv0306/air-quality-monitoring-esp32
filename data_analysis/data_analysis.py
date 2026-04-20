@@ -1,11 +1,10 @@
-"""
+﻿"""
 Data analysis for indoor PM2.5 across Kitchen, Hall, and Bedroom.
 
 This script is a direct conversion of the original notebook. It loads sensor
 data, computes summary statistics, and saves plots under
 `data/Dhruv_Patel/Plots`.
 """
-
 
 # --- Markdown cell 0 ---
 # # This file contains data analyasis performed over full dataset
@@ -24,10 +23,26 @@ import matplotlib.cm as cm
 import numpy as np
 import seaborn as sns
 import os
+import sys
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 from load_data import load_data_file, load_data_directory
 
+# Configure UTF-8 encoding for console output to handle special characters like µ
+if sys.platform == "win32":
+    import io
+
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+# --- Colours ---
+kitchen_colour = "#E41A1C"  # red
+hall_colour = "#4DAF4A"  # green
+bedroom_colour = "#377EB8"  # blue
+shaded_area_colour = "#FF7F00"  # orange
+who_guideline_colour = "#984EA3"  # purple
+india_guideline_colour = "#A65628"  # brown
+outdoor_colour = "#999999"  # grey
 
 # --- Markdown cell 3 ---
 # ## Data Directory Paths
@@ -35,11 +50,12 @@ from load_data import load_data_file, load_data_directory
 
 # --- Code cell 4 ---
 # Base directories for input data and output plots.
-DATA_DIR = 'data/Dhruv_Patel/'
-BEDROOM_DIR = f'{DATA_DIR}/Bedroom'
-HALL_DIR = f'{DATA_DIR}/Hall'
-KITCHEN_DIR = f'{DATA_DIR}/Kitchen'
-PLOT_DIR = f'{DATA_DIR}/Plots'
+DATA_DIR = "data/Dhruv_Patel/"
+BEDROOM_DIR = f"{DATA_DIR}/Bedroom"
+HALL_DIR = f"{DATA_DIR}/Hall"
+KITCHEN_DIR = f"{DATA_DIR}/Kitchen"
+PLOT_DIR = f"{DATA_DIR}/Plots"
+OUTDOOR_DATA = f"{DATA_DIR}/outdoor_data.csv"
 
 
 # --- Markdown cell 5 ---
@@ -47,6 +63,231 @@ PLOT_DIR = f'{DATA_DIR}/Plots'
 
 
 # --- Code cell 6 ---
+# ============================================================================
+# Remove None Values and Convert Data to 1 Hour Average
+# ============================================================================
+def remove_none_and_average(data, name):
+    print(f"{name} shape before removing none values: {data.shape}")
+    # Remove None values from all the coloums
+    data = data.dropna()
+    print(f"{name} shape after removing none values: {data.shape}")
+
+    print(f"{name} shape before 1 hour average: {data.shape}")
+    # Convert to datetime if not already
+    data["DateTime"] = pd.to_datetime(data["DateTime"])
+
+    # Set Time as index
+    data.set_index("DateTime", inplace=True)
+
+    # Resample to 30 minute averages
+    data = data.resample("30min").mean()
+
+    print(f"{name} shape after 30 minute average: {data.shape}")
+
+    return data
+
+
+def main():
+    """
+    Main execution function that loads data and runs all analyses.
+    """
+    kitchen_df = get_data(KITCHEN_DIR)
+    hall_df = get_data(HALL_DIR)
+    bedroom_df = get_data(BEDROOM_DIR)
+    outdoor_df = pd.read_csv(OUTDOOR_DATA)
+    outdoor_df.columns = outdoor_df.columns.str.strip()
+    outdoor_df = outdoor_df.rename(columns={"date": "DateTime"})
+    outdoor_df["DateTime"] = pd.to_datetime(outdoor_df["DateTime"])
+    outdoor_df = outdoor_df.set_index("DateTime")[["pm25"]]
+    if kitchen_df is None:
+        raise ValueError("kitchen_df is None")
+    if hall_df is None:
+        raise ValueError("hall_df is None")
+    if bedroom_df is None:
+        raise ValueError("bedroom_df is None")
+    if outdoor_df is None:
+        raise ValueError("outdoor_df is None")
+    # Convert data to 1 hour average for outdoor data to match indoor data frequency
+    kitchen_df = remove_none_and_average(kitchen_df, "Kitchen")
+    hall_df = remove_none_and_average(hall_df, "Hall")
+    bedroom_df = remove_none_and_average(bedroom_df, "Bedroom")
+    min_date = min(
+        kitchen_df.index.min(),
+        hall_df.index.min(),
+        bedroom_df.index.min(),
+    )
+    max_date = max(
+        kitchen_df.index.max(),
+        hall_df.index.max(),
+        bedroom_df.index.max(),
+    )
+    # Convert min_date and max_date to datetime if they are not already
+    # Convert datetime fromate to only date format (YYYY-MM-DD) to match outdoor data date format
+    min_date = pd.to_datetime(min_date).date()
+    max_date = pd.to_datetime(max_date).date()
+    print(
+        f"Filtering outdoor data to match indoor data date range: {min_date} to {max_date}"
+    )
+    # Convert outdoor_df index to date format (YYYY-MM-DD) to match min_date and max_date format
+    outdoor_df.index = pd.to_datetime(outdoor_df.index).date
+    outdoor_df = outdoor_df[
+        (outdoor_df.index >= min_date) & (outdoor_df.index <= max_date)
+    ]
+
+    print("=" * 80)
+    print("Running Multi-Day Time Series Analysis...")
+    print("=" * 80)
+    multi_day_time_series(
+        kitchen_df=kitchen_df,
+        hall_df=hall_df,
+        bedroom_df=bedroom_df,
+        outdoor_df=outdoor_df,
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Daily Average Trend Plot Analysis...")
+    print("=" * 80)
+    daily_average_trend_plot(
+        kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Daily Boxplot Analysis...")
+    print("=" * 80)
+    bedroom_df_copy = bedroom_df.copy()
+    hall_df_copy = hall_df.copy()
+    kitchen_df_copy = kitchen_df.copy()
+    create_daily_boxplot(
+        kitchen_df=kitchen_df_copy, hall_df=hall_df_copy, bedroom_df=bedroom_df_copy
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Diurnal Pattern Analysis...")
+    print("=" * 80)
+    kitchen_base_avg, hall_base_avg, bedroom_base_avg = diurnal_pattern(
+        kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Weekday vs Weekend Comparison Analysis...")
+    print("=" * 80)
+    weekdays_vs_weekends_comparison(
+        kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Percentage Time Above Guidelines Analysis...")
+    print("=" * 80)
+    percentage_time_above_guidelines(
+        kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Peak Event Analysis...")
+    print("=" * 80)
+    peak_event_analysis(
+        kitchen_df=kitchen_df,
+        hall_df=hall_df,
+        bedroom_df=bedroom_df,
+        kitchen_base_avg=kitchen_base_avg,
+        hall_base_avg=hall_base_avg,
+        bedroom_base_avg=bedroom_base_avg,
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Cooking-Related PM2.5 Contribution Analysis...")
+    print("=" * 80)
+    calculate_cooking_related_PM2_5_contribution_analysis(
+        room_df=bedroom_df,
+        room_name="Bedroom",
+        room_base_avg=bedroom_base_avg,
+        room_colour=bedroom_colour,
+    )
+    calculate_cooking_related_PM2_5_contribution_analysis(
+        room_df=hall_df,
+        room_name="Hall",
+        room_base_avg=hall_base_avg,
+        room_colour=hall_colour,
+    )
+    calculate_cooking_related_PM2_5_contribution_analysis(
+        room_df=kitchen_df,
+        room_name="Kitchen",
+        room_base_avg=kitchen_base_avg,
+        room_colour=kitchen_colour,
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Decay Rate After Cooking Analysis...")
+    print("=" * 80)
+    kitchen_decay_df = decay_rate_after_cooking(
+        room_df=kitchen_df,
+        room_colour=kitchen_colour,
+        room_name="Kitchen",
+        room_base_avg=kitchen_base_avg,
+    )
+    hall_decay_df = decay_rate_after_cooking(
+        room_df=hall_df,
+        room_colour=hall_colour,
+        room_name="Hall",
+        room_base_avg=hall_base_avg,
+    )
+    bedroom_decay_df = decay_rate_after_cooking(
+        room_df=bedroom_df,
+        room_colour=bedroom_colour,
+        room_name="Bedroom",
+        room_base_avg=bedroom_base_avg,
+    )
+    if not kitchen_decay_df.empty:
+        print(
+            f"Average Decay Rate After Cooking Events - Kitchen: {kitchen_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+        )
+        print(
+            f"Average Decay Duration After Cooking Events - Kitchen: {kitchen_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+        )
+    if not hall_decay_df.empty:
+        print(
+            f"Average Decay Rate After Cooking Events - Hall: {hall_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+        )
+        print(
+            f"Average Decay Duration After Cooking Events - Hall: {hall_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+        )
+    if not bedroom_decay_df.empty:
+        print(
+            f"Average Decay Rate After Cooking Events - Bedroom: {bedroom_decay_df['Decay Rate (µg/m³/hour)'].mean():.2f}"
+        )
+        print(
+            f"Average Decay Duration After Cooking Events - Bedroom: {bedroom_decay_df['Decay Duration (hours)'].mean():.2f} hours"
+        )
+
+    print("\n" + "=" * 80)
+    print("Running Spatial Gradient Analysis...")
+    print("=" * 80)
+    spatial_gradient_plot(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
+
+    print("\n" + "=" * 80)
+    print("Running Particle Size Distribution Analysis...")
+    print("=" * 80)
+    particle_size_distribution(
+        kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df
+    )
+
+    print("\n" + "=" * 80)
+    print("Running Correlation Heatmap Analysis...")
+    print("=" * 80)
+    correlation_heatmap(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
+    print("\n" + "=" * 80)
+    print("Running Frequency Analysis...")
+    print("=" * 80)
+    frequency_analysis(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
+
+    print("\n" + "=" * 80)
+    print("24-Hour Average Analysis (WHO & NAAQS Guidelines Comparison)...")
+    print("=" * 80)
+    daily_average_guideline_comparison(
+        kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df
+    )
+
+
 def get_data(roomPath=None):
     """
     Load and concatenate all sensor files from a room directory.
@@ -75,12 +316,6 @@ def get_data(roomPath=None):
             return pd.concat(dfs, ignore_index=True)
 
 
-# Load data for each room (expects a DateTime column in each dataframe).
-kitchen_df = get_data(KITCHEN_DIR)
-hall_df = get_data(HALL_DIR)
-bedroom_df = get_data(BEDROOM_DIR)
-
-
 # --- Markdown cell 7 ---
 # ## Multi-Day Time Series (Foundation Plot)
 # - Plot Pm2.5atm vs Time for all three rooms on the same graph
@@ -106,76 +341,96 @@ def remove_outliers_iqr(df, column, threshold):
 
 
 # --- Code cell 10 ---
-def multi_day_time_series(kitchen_df=None, hall_df=None, bedroom_df=None):
-    """
-    Plot per-minute PM2.5 time series for each room across the full dataset.
-
-    The function resamples to 1-minute means, removes extreme outliers, and
-    writes a 3-panel plot to `Plots/Multi_Day_Time_Series`.
-    """
+def multi_day_time_series(
+    kitchen_df=None, hall_df=None, bedroom_df=None, outdoor_df=None
+):
     if kitchen_df is None:
         raise ValueError("kitchen_df is None")
     if bedroom_df is None:
         raise ValueError("bedroom_df is None")
     if hall_df is None:
         raise ValueError("hall_df is None")
-    
-    # Work with only the time and PM2.5 columns for consistency.
-    bedroom_df_subset = bedroom_df[['DateTime', 'pm2.5atm']]
-    hall_df_subset = hall_df[['DateTime', 'pm2.5atm']]
-    kitchen_df_subset = kitchen_df[['DateTime', 'pm2.5atm']]
+    if outdoor_df is None:
+        raise ValueError("outdoor_df is None")
 
-    # Resample to per-minute averages to smooth high-frequency noise.
-    bedroom_df_subset['DateTime'] = pd.to_datetime(bedroom_df_subset['DateTime'])
-    bedroom_df_subset.set_index('DateTime', inplace=True)
-    bedroom_df_subset = bedroom_df_subset.resample('1min').mean()
+    # Extract DateTime and PM2.5 columns for each room
+    bedroom_df_subset = bedroom_df[["pm2.5atm"]].copy()
+    hall_df_subset = hall_df[["pm2.5atm"]].copy()
+    kitchen_df_subset = kitchen_df[["pm2.5atm"]].copy()
+    outdoor_df_subset = outdoor_df.copy()
 
-    hall_df_subset['DateTime'] = pd.to_datetime(hall_df_subset['DateTime'])
-    hall_df_subset.set_index('DateTime', inplace=True)
-    hall_df_subset = hall_df_subset.resample('1min').mean()
+    # Convert DateTime to datetime if not already
+    bedroom_df_subset.index = pd.to_datetime(bedroom_df_subset.index)
+    hall_df_subset.index = pd.to_datetime(hall_df_subset.index)
+    kitchen_df_subset.index = pd.to_datetime(kitchen_df_subset.index)
 
-    kitchen_df_subset['DateTime'] = pd.to_datetime(kitchen_df_subset['DateTime'])
-    kitchen_df_subset.set_index('DateTime', inplace=True)
-    kitchen_df_subset = kitchen_df_subset.resample('1min').mean()
+    # Log scale requires positive values
+    kitchen_series = kitchen_df_subset["pm2.5atm"].where(
+        kitchen_df_subset["pm2.5atm"] > 0
+    )
+    hall_series = hall_df_subset["pm2.5atm"].where(hall_df_subset["pm2.5atm"] > 0)
+    bedroom_series = bedroom_df_subset["pm2.5atm"].where(
+        bedroom_df_subset["pm2.5atm"] > 0
+    )
+    outdoor_df_subset = outdoor_df_subset.copy()
+    # Convert outdoor pm25 to numeric and filter positive values
+    outdoor_df_subset["pm25"] = pd.to_numeric(
+        outdoor_df_subset["pm25"], errors="coerce"
+    )
+    outdoor_df_subset["pm25"] = outdoor_df_subset["pm25"].where(
+        outdoor_df_subset["pm25"] > 0
+    )
 
-    # Trim unrealistic spikes before plotting.
-    bedroom_df_subset = remove_outliers_iqr(bedroom_df_subset, 'pm2.5atm', 200)
-    hall_df_subset = remove_outliers_iqr(hall_df_subset, 'pm2.5atm', 1500)
-    kitchen_df_subset = remove_outliers_iqr(kitchen_df_subset, 'pm2.5atm', 1500)
-
-    # Plot the perminute average of `pm2.5atm` for each room in a subplot with a shared x-axis
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-
-    ax1.plot(bedroom_df_subset.index, bedroom_df_subset['pm2.5atm'], label='Bedroom', alpha=0.7, color='blue')
-    ax1.set_ylabel('Per Minute Average of pm2.5atm')
-    ax1.set_title('Bedroom')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-
-    ax2.plot(hall_df_subset.index, hall_df_subset['pm2.5atm'], label='Hall', alpha=0.7, color='orange')
-    ax2.set_ylabel('Per Minute Average of pm2.5atm')
-    ax2.set_title('Hall')
-    ax2.legend()
-    ax2.grid(alpha=0.3)
-
-    ax3.plot(kitchen_df_subset.index, kitchen_df_subset['pm2.5atm'], label='Kitchen', alpha=0.7, color='green')
-    ax3.set_xlabel('DateTime')
-    ax3.set_ylabel('Per Minute Average of pm2.5atm')
-    ax3.set_title('Kitchen')
-    ax3.legend()
-    ax3.grid(alpha=0.3)
-
-    plt.suptitle('Per Minute Average of pm2.5atm for Each Room')
-    plt.tight_layout()
+    # Plot the data for each room in a single plot
+    plt.figure(figsize=(15, 8))
+    plt.plot(
+        kitchen_df_subset.index,
+        kitchen_series,
+        color=kitchen_colour,
+        label="Kitchen",
+        alpha=0.8,
+    )
+    plt.plot(
+        hall_df_subset.index,
+        hall_series,
+        color=hall_colour,
+        label="Hall",
+        alpha=0.8,
+    )
+    plt.plot(
+        bedroom_df_subset.index,
+        bedroom_series,
+        color=bedroom_colour,
+        label="Bedroom",
+        alpha=0.8,
+    )
+    plt.plot(
+        outdoor_df_subset.index,
+        outdoor_df_subset["pm25"],
+        color=outdoor_colour,
+        label="Outdoor",
+        alpha=1.0,
+        linewidth=4,
+    )
+    plt.yscale("log")
+    plt.xlabel("Date")
+    plt.ylabel("PM2.5 (µg/m³, log scale)")
+    plt.title("Multi-Day Time Series of PM2.5")
+    plt.legend()
+    plt.grid(alpha=0.3, which="both")
+    # Format x-axis to show date only (use weekly intervals to avoid too many ticks)
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    plt.xticks(rotation=45)
     # Save the plot
-    os.makedirs(f'{PLOT_DIR}/Multi_Day_Time_Series', exist_ok=True)
-    plt.savefig(f'{PLOT_DIR}/Multi_Day_Time_Series/pm25_per_minute_average.png', dpi=300, bbox_inches='tight')
+    plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Multi_Day_Time_Series"), exist_ok=True)
+    plt.savefig(
+        os.path.join(PLOT_DIR, "Multi_Day_Time_Series", "Multi_Day_Time_Series.png")
+    )
+
+    # Show the plot
     plt.show()
-
-
-# --- Code cell 11 ---
-# Call the function
-multi_day_time_series(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
 
 
 # --- Markdown cell 12 ---
@@ -183,7 +438,7 @@ multi_day_time_series(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom
 # - For each day compute:
 #   - Daily mean PM2.5
 #   - Daily max PM2.5
-# 
+#
 # - Plot daily mean & max Vs date in same graph
 
 
@@ -200,62 +455,90 @@ def daily_average_trend_plot(kitchen_df=None, hall_df=None, bedroom_df=None):
         raise ValueError("hall_df is None")
     if bedroom_df is None:
         raise ValueError("bedroom_df is None")
-    
+
     # Keep only time and PM2.5 columns for resampling.
-    bedroom_df_subset = bedroom_df[['DateTime', 'pm2.5atm']]
-    hall_df_subset = hall_df[['DateTime', 'pm2.5atm']]
-    kitchen_df_subset = kitchen_df[['DateTime', 'pm2.5atm']]
+    bedroom_df_subset = bedroom_df[["pm2.5atm"]]
+    hall_df_subset = hall_df[["pm2.5atm"]]
+    kitchen_df_subset = kitchen_df[["pm2.5atm"]]
 
     # Resample to daily averages and daily maxima.
-    bedroom_df_subset['DateTime'] = pd.to_datetime(bedroom_df_subset['DateTime'])
-    bedroom_df_subset.set_index('DateTime', inplace=True)
-    bedroom_daily_avg = bedroom_df_subset.resample('D').mean()
-    bedroom_daily_max = bedroom_df_subset.resample('D').max()
+    bedroom_daily_avg = bedroom_df_subset.resample("D").mean()
+    bedroom_daily_max = bedroom_df_subset.resample("D").max()
 
-    hall_df_subset['DateTime'] = pd.to_datetime(hall_df_subset['DateTime'])
-    hall_df_subset.set_index('DateTime', inplace=True)
-    hall_daily_avg = hall_df_subset.resample('D').mean()
-    hall_daily_max = hall_df_subset.resample('D').max()
+    hall_daily_avg = hall_df_subset.resample("D").mean()
+    hall_daily_max = hall_df_subset.resample("D").max()
 
-    kitchen_df_subset['DateTime'] = pd.to_datetime(kitchen_df_subset['DateTime'])
-    kitchen_df_subset.set_index('DateTime', inplace=True)
-    kitchen_daily_avg = kitchen_df_subset.resample('D').mean()
-    kitchen_daily_max = kitchen_df_subset.resample('D').max()
+    kitchen_daily_avg = kitchen_df_subset.resample("D").mean()
+    kitchen_daily_max = kitchen_df_subset.resample("D").max()
 
     # Plot the daily average and max in stacked subplots for easy comparison.
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-    ax1.plot(bedroom_daily_avg.index, bedroom_daily_avg['pm2.5atm'], label='Bedroom Daily Average', alpha=0.7, color='blue')
-    ax1.plot(bedroom_daily_max.index, bedroom_daily_max['pm2.5atm'], label='Bedroom Daily Max', alpha=0.7, color='red')
-    ax1.set_ylabel('Daily Average and Max of pm2.5atm')
-    ax1.set_title('Bedroom')
+    ax1.plot(
+        bedroom_daily_avg.index,
+        bedroom_daily_avg["pm2.5atm"],
+        label="Bedroom Daily Average",
+        alpha=0.7,
+        color="blue",
+    )
+    ax1.plot(
+        bedroom_daily_max.index,
+        bedroom_daily_max["pm2.5atm"],
+        label="Bedroom Daily Max",
+        alpha=0.7,
+        color="red",
+    )
+    ax1.set_ylabel("Daily Average and Max of pm2.5atm")
+    ax1.set_title("Bedroom")
     ax1.legend()
     ax1.grid(alpha=0.3)
 
-    ax2.plot(hall_daily_avg.index, hall_daily_avg['pm2.5atm'], label='Hall Daily Average', alpha=0.7, color='orange')
-    ax2.plot(hall_daily_max.index, hall_daily_max['pm2.5atm'], label='Hall Daily Max', alpha=0.7, color='red')
-    ax2.set_ylabel('Daily Average and Max of pm2.5atm')
-    ax2.set_title('Hall')
+    ax2.plot(
+        hall_daily_avg.index,
+        hall_daily_avg["pm2.5atm"],
+        label="Hall Daily Average",
+        alpha=0.7,
+        color="orange",
+    )
+    ax2.plot(
+        hall_daily_max.index,
+        hall_daily_max["pm2.5atm"],
+        label="Hall Daily Max",
+        alpha=0.7,
+        color="red",
+    )
+    ax2.set_ylabel("Daily Average and Max of pm2.5atm")
+    ax2.set_title("Hall")
     ax2.legend()
     ax2.grid(alpha=0.3)
 
-
-    ax3.plot(kitchen_daily_avg.index, kitchen_daily_avg['pm2.5atm'], label='Kitchen Daily Average', alpha=0.7, color='green')
-    ax3.plot(kitchen_daily_max.index, kitchen_daily_max['pm2.5atm'], label='Kitchen Daily Max', alpha=0.7, color='red')
-    ax3.set_ylabel('Daily Average and Max of pm2.5atm')
-    ax3.set_title('Kitchen')
+    ax3.plot(
+        kitchen_daily_avg.index,
+        kitchen_daily_avg["pm2.5atm"],
+        label="Kitchen Daily Average",
+        alpha=0.7,
+        color="green",
+    )
+    ax3.plot(
+        kitchen_daily_max.index,
+        kitchen_daily_max["pm2.5atm"],
+        label="Kitchen Daily Max",
+        alpha=0.7,
+        color="red",
+    )
+    ax3.set_ylabel("Daily Average and Max of pm2.5atm")
+    ax3.set_title("Kitchen")
     ax3.legend()
     ax3.grid(alpha=0.3)
-    plt.suptitle('Daily Average and Max of pm2.5atm for Each Room')
+    plt.suptitle("Daily Average and Max of pm2.5atm for Each Room")
     plt.tight_layout()
     # Save the plot
-    os.makedirs(f'{PLOT_DIR}/Daily_Average_Trend_Plot', exist_ok=True)
-    plt.savefig(f'{PLOT_DIR}/Daily_Average_Trend_Plot/pm25_daily_avg_max.png', dpi=300, bbox_inches='tight')
+    os.makedirs(f"{PLOT_DIR}/Daily_Average_Trend_Plot", exist_ok=True)
+    plt.savefig(
+        f"{PLOT_DIR}/Daily_Average_Trend_Plot/pm25_daily_avg_max.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.show()
-
-
-# --- Code cell 14 ---
-# Call the function
-daily_average_trend_plot(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
 
 
 # --- Markdown cell 15 ---
@@ -274,123 +557,170 @@ daily_average_trend_plot(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedr
 
 # --- Code cell 17 ---
 # Alternative version with enhanced statistical information
-def create_enhanced_daily_boxplots(hall_data, bedroom_data, kitchen_data, rooms=['Hall', 'Bedroom', 'Kitchen']):
-    """
-    Create daily PM2.5 boxplots with variability overlays.
+def create_daily_boxplot(kitchen_df=None, hall_df=None, bedroom_df=None):
+    if kitchen_df is None:
+        raise ValueError("kitchen_df is None")
+    if bedroom_df is None:
+        raise ValueError("bedroom_df is None")
+    if hall_df is None:
+        raise ValueError("hall_df is None")
 
-    The top row shows distributions by day; the bottom row shows the
-    coefficient of variation (CV) to highlight days with unusually high
-    variability.
-    """
+    # Create a combined DataFrame for boxplot
+    kitchen_reset = kitchen_df.reset_index().copy()
+    hall_reset = hall_df.reset_index().copy()
+    bedroom_reset = bedroom_df.reset_index().copy()
+    kitchen_reset["Room"] = "Kitchen"
+    hall_reset["Room"] = "Hall"
+    bedroom_reset["Room"] = "Bedroom"
+    combined_df = pd.concat(
+        [
+            kitchen_reset[["pm2.5atm", "Room"]],
+            hall_reset[["pm2.5atm", "Room"]],
+            bedroom_reset[["pm2.5atm", "Room"]],
+        ],
+        ignore_index=True,
+    )
 
-    # Remove outliers from the original dataframes before adding the Day field
-    bedroom_data = remove_outliers_iqr(bedroom_data, 'pm2.5atm', 200)
-    hall_data = remove_outliers_iqr(hall_data, 'pm2.5atm', 1500)
-    kitchen_data = remove_outliers_iqr(kitchen_data, 'pm2.5atm', 1500)
+    plt.figure(figsize=(12, 8))
+    ax = sns.boxplot(
+        x="Room",
+        y="pm2.5atm",
+        hue="Room",
+        data=combined_df,
+        palette=[kitchen_colour, hall_colour, bedroom_colour],
+        legend=False,
+    )
 
-    # Add a day-of-month label to group within a month-long sample.
-    bedroom_data["Day"] = bedroom_data["DateTime"].dt.day.astype(str)
-    hall_data["Day"] = hall_data["DateTime"].dt.day.astype(str)
-    kitchen_data["Day"] = kitchen_data["DateTime"].dt.day.astype(str)
+    # Add average lines for each room (full width)
+    room_averages = combined_df.groupby("Room")["pm2.5atm"].mean()
+    room_positions = {"Kitchen": 0, "Hall": 1, "Bedroom": 2}
+    room_colors = {
+        "Kitchen": kitchen_colour,
+        "Hall": hall_colour,
+        "Bedroom": bedroom_colour,
+    }
 
-    
+    for room, avg_val in room_averages.items():
+        pos = room_positions[room]
+        color = room_colors[room]
+        # ax.plot([pos - 0.4, pos + 0.4], [avg_val, avg_val], color=color, linestyle="--", linewidth=3, label=f"{room} Avg: {avg_val:.1f}")
+
+    # Add lines showing average PM2.5 values for each room with labels
+    for i, (room, avg_val) in enumerate(room_averages.items()):
+        plt.axhline(
+            y=avg_val,
+            color=room_colors[room],
+            linestyle="--",
+            linewidth=3,
+            label=f"{room} Avg: {avg_val:.1f}",
+        )
+    plt.yscale("log")
+    plt.ylabel("PM2.5 (µg/m³, log scale)", fontsize=14, fontweight="bold")
+    plt.xlabel("Room", fontsize=14, fontweight="bold")
+    plt.title("Combined Daily Boxplot of PM2.5 by Room", fontsize=16, fontweight="bold")
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.legend(fontsize=11, loc="upper right")
+    # Save the plot
+    plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Daily_Boxplot"), exist_ok=True)
+    plt.savefig(os.path.join(PLOT_DIR, "Daily_Boxplot", "Boxplot_Combined.png"))
+    # Show the plot
+    plt.show()
+
+    # Extract Date from DateTime column for each room and calculate daily average pm2.5atm
+    kitchen_daily = kitchen_df.reset_index().copy()
+    hall_daily = hall_df.reset_index().copy()
+    bedroom_daily = bedroom_df.reset_index().copy()
+
+    kitchen_daily["Day"] = pd.to_datetime(kitchen_daily["DateTime"]).dt.day.astype(str)
+    hall_daily["Day"] = pd.to_datetime(hall_daily["DateTime"]).dt.day.astype(str)
+    bedroom_daily["Day"] = pd.to_datetime(bedroom_daily["DateTime"]).dt.day.astype(str)
+
     # Store the dataframes in a dictionary for easy access
     room_dataframes = {
-        'Hall': hall_data,
-        'Bedroom': bedroom_data,
-        'Kitchen': kitchen_data
+        "Kitchen": kitchen_daily,
+        "Hall": hall_daily,
+        "Bedroom": bedroom_daily,
     }
-    
-    fig, axes = plt.subplots(2, len(rooms), figsize=(20, 10), 
-                            gridspec_kw={'height_ratios': [3, 1]}, sharey='row')
-    if len(rooms) == 1:
-        axes = axes.reshape(-1, 1)
-    
-    for idx, room in enumerate(rooms):
+    room_colors = {
+        "Kitchen": kitchen_colour,
+        "Hall": hall_colour,
+        "Bedroom": bedroom_colour,
+    }
+    rooms = ["Kitchen", "Hall", "Bedroom"]
+
+    # Create separate plots for each room
+    for room in rooms:
         # Get data for current room from the corresponding dataframe
         room_data = room_dataframes[room]
-        
-        # Main boxplot (top subplot): distribution of PM2.5 per day.
+
+        # Main boxplot
         daily_data = []
         day_labels = []
         daily_stats = []
-        
-        for day in sorted(room_data['Day'].unique(), key=int):
-            day_values = room_data[room_data['Day'] == day]['pm2.5atm'].values
+
+        for day in sorted(room_data["Day"].unique(), key=int):
+            day_values = room_data[room_data["Day"] == day]["pm2.5atm"].values
             if len(day_values) > 0:
                 daily_data.append(day_values)
-                day_labels.append(f'{day}')
-                # Calculate daily statistics for overlays and color mapping.
-                daily_stats.append({
-                    'mean': np.mean(day_values),
-                    'std': np.std(day_values),
-                    'cv': np.std(day_values) / np.mean(day_values) * 100,
-                    'max': np.max(day_values)
-                })
-        
-        # Create main boxplot
-        bp = axes[0, idx].boxplot(daily_data, tick_labels=day_labels, patch_artist=True)
-        
+                day_labels.append(f"{day}")
+                # Calculate daily statistics
+                daily_stats.append(
+                    {
+                        "mean": np.mean(day_values),
+                        "std": np.std(day_values),
+                        "cv": np.std(day_values) / np.mean(day_values) * 100,
+                        "max": np.max(day_values),
+                    }
+                )
+
+        # Create separate figure for each room
+        fig, ax = plt.subplots(figsize=(16, 10))
+        bp = ax.boxplot(
+            daily_data, tick_labels=day_labels, patch_artist=True, widths=0.6
+        )
+
         # Color boxes based on daily mean (gradient from low to high)
-        daily_means = [stats['mean'] for stats in daily_stats]
-        norm = Normalize(vmin=min(daily_means), vmax=max(daily_means))
-        cmap = plt.get_cmap('Reds')
-        
-        for patch, mean_val in zip(bp['boxes'], daily_means):
-            patch.set_facecolor(cmap(norm(mean_val)))
-            patch.set_alpha(0.8)
-        
-        axes[0, idx].set_title(f'{room} - Daily PM2.5 Distribution', fontweight='bold')
-        axes[0, idx].set_ylabel('PM2.5 (μg/m³)' if idx == 0 else '')
-        axes[0, idx].grid(True, alpha=0.3)
-        
-        # Bottom subplot: coefficient of variation (higher = less stable day).
-        cv_values = [stats['cv'] for stats in daily_stats]
-        bars = axes[1, idx].bar(range(len(cv_values)), cv_values, 
-                               color='lightblue', alpha=0.7, edgecolor='navy')
-        
-        # Highlight days with high variability (CV > 50%)
-        for i, (bar, cv) in enumerate(zip(bars, cv_values)):
-            if cv > 50:  # High variability threshold
-                bar.set_color('orange')
-                bar.set_alpha(0.9)
-        
-        axes[1, idx].set_xlabel('Day')
-        axes[1, idx].set_ylabel('CV (%)' if idx == 0 else '')
-        axes[1, idx].set_title('Daily Variability (Coefficient of Variation)')
-        axes[1, idx].set_xticks(range(len(day_labels)))
-        axes[1, idx].set_xticklabels(day_labels)
-        axes[1, idx].axhline(y=50, color='red', linestyle='--', alpha=0.7, 
-                            label='High variability threshold')
-        axes[1, idx].grid(True, alpha=0.3)
-    
-    plt.suptitle('Comprehensive Daily PM2.5 Analysis\n' + 
-                'Top: Distribution patterns, Bottom: Variability metrics', 
-                fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    
-    # Save the plot
-    os.makedirs(f'{PLOT_DIR}/Enhanced_Daily_Boxplots', exist_ok=True)
-    plt.savefig(f'{PLOT_DIR}/Enhanced_Daily_Boxplots/enhanced_daily_boxplots.png', dpi=300, bbox_inches='tight')
-    plt.show()
+        daily_means = [stats["mean"] for stats in daily_stats]
+        if daily_means:
+            norm = Normalize(vmin=min(daily_means), vmax=max(daily_means))
+            cmap = plt.get_cmap("Reds")
 
+            for patch, mean_val in zip(bp["boxes"], daily_means):
+                patch.set_facecolor(cmap(norm(mean_val)))
+                patch.set_alpha(0.8)
+                patch.set_linewidth(2)
 
-# --- Code cell 18 ---
-# Create copies of the dataframes to avoid modifying originals
-if bedroom_df is None:
-    raise ValueError("bedroom_df is None")
-bedroom_df_copy = bedroom_df.copy()
-if hall_df is None:
-    raise ValueError("hall_df is None")
-hall_df_copy = hall_df.copy()
-if kitchen_df is None:
-    raise ValueError("kitchen_df is None")
-kitchen_df_copy = kitchen_df.copy()
+        # Increase whisker and median line widths
+        for whisker in bp["whiskers"]:
+            whisker.set_linewidth(2)
+        for cap in bp["caps"]:
+            cap.set_linewidth(2)
+        for median in bp["medians"]:
+            median.set_linewidth(3)
+            median.set_color(room_colors[room])
 
-# Create enhanced daily boxplots for each room
-create_enhanced_daily_boxplots(
-    hall_data=hall_df_copy, bedroom_data=bedroom_df_copy, kitchen_data=kitchen_df_copy, rooms=['Hall', 'Bedroom', 'Kitchen']
-)
+        ax.set_title(
+            f"{room} - Daily PM2.5 Distribution", fontweight="bold", fontsize=18
+        )
+        ax.set_xlabel("Day", fontsize=16, fontweight="bold")
+        ax.set_ylabel("PM2.5 (µg/m³, log scale)", fontsize=16, fontweight="bold")
+        ax.set_yscale("log")
+        ax.grid(True, alpha=0.3, which="both")
+        ax.tick_params(axis="x", labelsize=13)
+        ax.tick_params(axis="y", labelsize=13)
+
+        fig.tight_layout()
+        # Save the plot
+        os.makedirs(os.path.join(PLOT_DIR, "Diurnal_Pattern"), exist_ok=True)
+        fig.savefig(
+            os.path.join(PLOT_DIR, "Diurnal_Pattern", f"Daily_Boxplot_{room}.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        # Show the plot
+        plt.show()
 
 
 # --- Markdown cell 19 ---
@@ -398,7 +728,7 @@ create_enhanced_daily_boxplots(
 # #### Step:
 # - Extract hour from DateTime
 # - Compute average PM2.5 for each hour (across all days)
-# 
+#
 # #### Plot:
 # - Hour (0–23) vs Average PM2.5
 # - Make separate curves for:
@@ -409,72 +739,97 @@ create_enhanced_daily_boxplots(
 
 # --- Code cell 20 ---
 def diurnal_pattern(kitchen_df=None, hall_df=None, bedroom_df=None):
-    """
-    Plot average PM2.5 by hour of day for each room.
-
-    This highlights daily cycles and likely source timing.
-    """
     if kitchen_df is None:
         raise ValueError("kitchen_df is None")
     if hall_df is None:
         raise ValueError("hall_df is None")
     if bedroom_df is None:
         raise ValueError("bedroom_df is None")
-    
-    # Keep only time and PM2.5 columns for hourly grouping.
-    bedroom_hourly_df = bedroom_df[['DateTime', 'pm2.5atm']]
-    hall_hourly_df = hall_df[['DateTime', 'pm2.5atm']]
-    kitchen_hourly_df = kitchen_df[['DateTime', 'pm2.5atm']]
 
-    # Remove outliers before creating hourly aggregates.
-    bedroom_hourly_df = remove_outliers_iqr(bedroom_hourly_df, 'pm2.5atm', 200)
-    hall_hourly_df = remove_outliers_iqr(hall_hourly_df, 'pm2.5atm', 1500)
-    kitchen_hourly_df = remove_outliers_iqr(kitchen_hourly_df, 'pm2.5atm', 1500)
+    # Reset index to convert DateTime from index to column
+    bedroom_df = bedroom_df.reset_index().copy()
+    hall_df = hall_df.reset_index().copy()
+    kitchen_df = kitchen_df.reset_index().copy()
+
+    # Create a list of only the pm2.5atm and DateTime columns for each room
+    bedroom_hourly_df = bedroom_df[["DateTime", "pm2.5atm"]].copy()
+    hall_hourly_df = hall_df[["DateTime", "pm2.5atm"]].copy()
+    kitchen_hourly_df = kitchen_df[["DateTime", "pm2.5atm"]].copy()
+
+    # Convert DateTime to datetime if not already
+    bedroom_hourly_df["DateTime"] = pd.to_datetime(bedroom_hourly_df["DateTime"])
+    hall_hourly_df["DateTime"] = pd.to_datetime(hall_hourly_df["DateTime"])
+    kitchen_hourly_df["DateTime"] = pd.to_datetime(kitchen_hourly_df["DateTime"])
 
     # Create a new column for the hour of the day in each dataframe
-    bedroom_hourly_df['Hour'] = bedroom_hourly_df['DateTime'].dt.hour
-    hall_hourly_df['Hour'] = hall_hourly_df['DateTime'].dt.hour
-    kitchen_hourly_df['Hour'] = kitchen_hourly_df['DateTime'].dt.hour
+    bedroom_hourly_df["Hour"] = bedroom_hourly_df["DateTime"].dt.hour
+    hall_hourly_df["Hour"] = hall_hourly_df["DateTime"].dt.hour
+    kitchen_hourly_df["Hour"] = kitchen_hourly_df["DateTime"].dt.hour
 
-    # Calculate average PM2.5 for each hour.
-    bedroom_hourly_avg = bedroom_hourly_df.groupby('Hour')['pm2.5atm'].mean()
-    hall_hourly_avg = hall_hourly_df.groupby('Hour')['pm2.5atm'].mean()
-    kitchen_hourly_avg = kitchen_hourly_df.groupby('Hour')['pm2.5atm'].mean()
+    # Calculate the average `pm2.5atm` for each hour of the day for each room
+    bedroom_hourly_avg = bedroom_hourly_df.groupby("Hour")["pm2.5atm"].mean()
+    hall_hourly_avg = hall_hourly_df.groupby("Hour")["pm2.5atm"].mean()
+    kitchen_hourly_avg = kitchen_hourly_df.groupby("Hour")["pm2.5atm"].mean()
 
-    # Plot the average `pm2.5atm` for each hour of the day for each room in a subplot with a shared x-axis
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-    ax1.plot(bedroom_hourly_avg.index, bedroom_hourly_avg.values, label='Bedroom', color='blue')
-    ax1.set_ylabel('Average pm2.5atm')
-    ax1.set_title('Average pm2.5atm by Hour of Day - Bedroom')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
+    # Print average of pm2.5atm between 5am to 6am and 4pm to 5pm for each room
+    print("Average PM2.5 between 5am to 6am:")
+    print(f"  Kitchen: {kitchen_hourly_avg.get(5, np.nan):.2f} µg/m³")
+    print(f"  Hall: {hall_hourly_avg.get(5, np.nan):.2f} µg/m³")
+    print(f"  Bedroom: {bedroom_hourly_avg.get(5, np.nan):.2f} µg/m³")
+    print("Average PM2.5 between 4pm to 5pm:")
+    print(f"  Kitchen: {kitchen_hourly_avg.get(16, np.nan):.2f} µg/m³")
+    print(f"  Hall: {hall_hourly_avg.get(16, np.nan):.2f} µg/m³")
+    print(f"  Bedroom: {bedroom_hourly_avg.get(16, np.nan):.2f} µg/m³")
+    print("Average PM2.5 between 5am to 6am and 4pm to 5pm:")
+    kitchen_base_avg = (
+        kitchen_hourly_avg.get(5, np.nan) + kitchen_hourly_avg.get(16, np.nan)
+    ) / 2
+    hall_base_avg = (
+        hall_hourly_avg.get(5, np.nan) + hall_hourly_avg.get(16, np.nan)
+    ) / 2
+    bedroom_base_avg = (
+        bedroom_hourly_avg.get(5, np.nan) + bedroom_hourly_avg.get(16, np.nan)
+    ) / 2
+    print(f"  Kitchen: {kitchen_base_avg:.2f} µg/m³")
+    print(f"  Hall: {hall_base_avg:.2f} µg/m³")
+    print(f"  Bedroom: {bedroom_base_avg:.2f} µg/m³")
 
-    ax2.plot(hall_hourly_avg.index, hall_hourly_avg.values, label='Hall', color='orange')
-    ax2.set_ylabel('Average pm2.5atm')
-    ax2.set_title('Average pm2.5atm by Hour of Day - Hall')
-    ax2.legend()
-    ax2.grid(alpha=0.3)
-
-    ax3.plot(kitchen_hourly_avg.index, kitchen_hourly_avg.values, label='Kitchen', color='green')
-    ax3.set_xlabel('Hour of Day')
-    ax3.set_ylabel('Average pm2.5atm')
-    ax3.set_title('Average pm2.5atm by Hour of Day - Kitchen')
-    ax3.legend()
-    ax3.grid(alpha=0.3)
-    ax3.set_xticks(range(0, 24, 2))
-    ax3.set_xticks(range(24), minor=True)
-    plt.suptitle('Average pm2.5atm by Hour of Day for Each Room')
-    plt.tight_layout()
-
+    # Plot the diurnal pattern for each room
+    plt.figure(figsize=(15, 6))
+    plt.plot(
+        kitchen_hourly_avg.index,
+        kitchen_hourly_avg.values,
+        color=kitchen_colour,
+        label="Kitchen",
+        alpha=0.8,
+    )
+    plt.plot(
+        hall_hourly_avg.index,
+        hall_hourly_avg.values,
+        color=hall_colour,
+        label="Hall",
+        alpha=0.8,
+    )
+    plt.plot(
+        bedroom_hourly_avg.index,
+        bedroom_hourly_avg.values,
+        color=bedroom_colour,
+        label="Bedroom",
+        alpha=0.8,
+    )
+    plt.xlabel("Hour of the Day")
+    plt.xticks(range(0, 24, 1))
+    plt.ylabel("Average PM2.5 (µg/m³)")
+    plt.title("Diurnal Pattern of PM2.5")
+    plt.legend()
+    plt.grid(alpha=0.3)
     # Save the plot
-    os.makedirs(f'{PLOT_DIR}/Hourly_Average_Trend_Plot', exist_ok=True)
-    plt.savefig(f'{PLOT_DIR}/Hourly_Average_Trend_Plot/pm25_hourly_avg.png', dpi=300, bbox_inches='tight')
+    plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Diurnal_Pattern"), exist_ok=True)
+    plt.savefig(os.path.join(PLOT_DIR, "Diurnal_Pattern", "Diurnal_Pattern.png"))
+    # Show the plot
     plt.show()
-
-
-# --- Code cell 21 ---
-# Call the function
-diurnal_pattern(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
+    return kitchen_base_avg, hall_base_avg, bedroom_base_avg
 
 
 # --- Markdown cell 22 ---
@@ -502,74 +857,118 @@ def weekdays_vs_weekends_comparison(kitchen_df=None, hall_df=None, bedroom_df=No
     if bedroom_df is None:
         raise ValueError("bedroom_df is None")
 
+    # Reset index to convert DateTime from index to column
+    bedroom_df = bedroom_df.reset_index().copy()
+    hall_df = hall_df.reset_index().copy()
+    kitchen_df = kitchen_df.reset_index().copy()
+
     # Keep only time and PM2.5 columns for weekday grouping.
-    bedroom_weekly_df = bedroom_df[['DateTime', 'pm2.5atm']]
-    hall_weekly_df = hall_df[['DateTime', 'pm2.5atm']]
-    kitchen_weekly_df = kitchen_df[['DateTime', 'pm2.5atm']]
+    bedroom_weekly_df = bedroom_df[["DateTime", "pm2.5atm"]]
+    hall_weekly_df = hall_df[["DateTime", "pm2.5atm"]]
+    kitchen_weekly_df = kitchen_df[["DateTime", "pm2.5atm"]]
 
     # Remove outliers before weekday aggregation.
-    bedroom_weekly_df = remove_outliers_iqr(bedroom_weekly_df, 'pm2.5atm', 200)
-    hall_weekly_df = remove_outliers_iqr(hall_weekly_df, 'pm2.5atm', 1500)
-    kitchen_weekly_df = remove_outliers_iqr(kitchen_weekly_df, 'pm2.5atm', 1500)
+    bedroom_weekly_df = remove_outliers_iqr(bedroom_weekly_df, "pm2.5atm", 200)
+    hall_weekly_df = remove_outliers_iqr(hall_weekly_df, "pm2.5atm", 1500)
+    kitchen_weekly_df = remove_outliers_iqr(kitchen_weekly_df, "pm2.5atm", 1500)
 
     # Create a new column for the weekday of the year in each dataframe
-    bedroom_weekly_df['Weekday'] = bedroom_weekly_df['DateTime'].dt.dayofweek
-    hall_weekly_df['Weekday'] = hall_weekly_df['DateTime'].dt.dayofweek
-    kitchen_weekly_df['Weekday'] = kitchen_weekly_df['DateTime'].dt.dayofweek
+    bedroom_weekly_df["Weekday"] = bedroom_weekly_df["DateTime"].dt.dayofweek
+    hall_weekly_df["Weekday"] = hall_weekly_df["DateTime"].dt.dayofweek
+    kitchen_weekly_df["Weekday"] = kitchen_weekly_df["DateTime"].dt.dayofweek
 
     # Calculate average PM2.5 for each weekday.
-    bedroom_weekly_avg = bedroom_weekly_df.groupby('Weekday')['pm2.5atm'].mean()
-    hall_weekly_avg = hall_weekly_df.groupby('Weekday')['pm2.5atm'].mean()
-    kitchen_weekly_avg = kitchen_weekly_df.groupby('Weekday')['pm2.5atm'].mean()
+    bedroom_weekly_avg = bedroom_weekly_df.groupby("Weekday")["pm2.5atm"].mean()
+    hall_weekly_avg = hall_weekly_df.groupby("Weekday")["pm2.5atm"].mean()
+    kitchen_weekly_avg = kitchen_weekly_df.groupby("Weekday")["pm2.5atm"].mean()
 
     # Collapse into Weekday (Mon–Fri) vs Weekend (Sat–Sun).
-    bedroom_weekly_avg['Weekend'] = bedroom_weekly_df[bedroom_weekly_df['Weekday'] >= 5]['pm2.5atm'].mean()
-    bedroom_weekly_avg['Weekday'] = bedroom_weekly_df[bedroom_weekly_df['Weekday'] < 5]['pm2.5atm'].mean()
-    hall_weekly_avg['Weekend'] = hall_weekly_df[hall_weekly_df['Weekday'] >= 5]['pm2.5atm'].mean()
-    hall_weekly_avg['Weekday'] = hall_weekly_df[hall_weekly_df['Weekday'] < 5]['pm2.5atm'].mean()
-    kitchen_weekly_avg['Weekend'] = kitchen_weekly_df[kitchen_weekly_df['Weekday'] >= 5]['pm2.5atm'].mean()
-    kitchen_weekly_avg['Weekday'] = kitchen_weekly_df[kitchen_weekly_df['Weekday'] < 5]['pm2.5atm'].mean()
+    bedroom_weekly_avg["Weekend"] = bedroom_weekly_df[
+        bedroom_weekly_df["Weekday"] >= 5
+    ]["pm2.5atm"].mean()
+    bedroom_weekly_avg["Weekday"] = bedroom_weekly_df[bedroom_weekly_df["Weekday"] < 5][
+        "pm2.5atm"
+    ].mean()
+    hall_weekly_avg["Weekend"] = hall_weekly_df[hall_weekly_df["Weekday"] >= 5][
+        "pm2.5atm"
+    ].mean()
+    hall_weekly_avg["Weekday"] = hall_weekly_df[hall_weekly_df["Weekday"] < 5][
+        "pm2.5atm"
+    ].mean()
+    kitchen_weekly_avg["Weekend"] = kitchen_weekly_df[
+        kitchen_weekly_df["Weekday"] >= 5
+    ]["pm2.5atm"].mean()
+    kitchen_weekly_avg["Weekday"] = kitchen_weekly_df[kitchen_weekly_df["Weekday"] < 5][
+        "pm2.5atm"
+    ].mean()
 
     # Plot the average `pm2.5atm` for Weekday vs Weekend for each room in a subplot with a shared x-axis
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-    ax1.bar(['Weekday', 'Weekend'], [bedroom_weekly_avg['Weekday'], bedroom_weekly_avg['Weekend']], color=['green', 'lightgreen'])
-    ax2.bar(['Weekday', 'Weekend'], [hall_weekly_avg['Weekday'], hall_weekly_avg['Weekend']], color=['green', 'lightgreen'])
-    ax3.bar(['Weekday', 'Weekend'], [kitchen_weekly_avg['Weekday'], kitchen_weekly_avg['Weekend']], color=['green', 'lightgreen'])
-    ax1.set_ylabel('Average pm2.5atm')
-    ax1.set_title('Average pm2.5atm - Bedroom')
+    ax1.bar(
+        ["Weekday", "Weekend"],
+        [bedroom_weekly_avg["Weekday"], bedroom_weekly_avg["Weekend"]],
+        color=["green", "lightgreen"],
+    )
+    ax2.bar(
+        ["Weekday", "Weekend"],
+        [hall_weekly_avg["Weekday"], hall_weekly_avg["Weekend"]],
+        color=["green", "lightgreen"],
+    )
+    ax3.bar(
+        ["Weekday", "Weekend"],
+        [kitchen_weekly_avg["Weekday"], kitchen_weekly_avg["Weekend"]],
+        color=["green", "lightgreen"],
+    )
+    ax1.set_ylabel("Average pm2.5atm")
+    ax1.set_title("Average pm2.5atm - Bedroom")
     ax1.grid(alpha=0.5)
-    ax1.set_yticks(np.arange(0, max(bedroom_weekly_avg['Weekday'], bedroom_weekly_avg['Weekend']) + 20, 10))
-    ax2.set_ylabel('Average pm2.5atm')
-    ax2.set_title('Average pm2.5atm - Hall')
+    ax1.set_yticks(
+        np.arange(
+            0,
+            max(bedroom_weekly_avg["Weekday"], bedroom_weekly_avg["Weekend"]) + 20,
+            10,
+        )
+    )
+    ax2.set_ylabel("Average pm2.5atm")
+    ax2.set_title("Average pm2.5atm - Hall")
     ax2.grid(alpha=0.5)
-    ax2.set_yticks(np.arange(0, max(hall_weekly_avg['Weekday'], hall_weekly_avg['Weekend']) + 20, 10))
-    ax3.set_ylabel('Average pm2.5atm')
-    ax3.set_title('Average pm2.5atm - Kitchen')
+    ax2.set_yticks(
+        np.arange(
+            0, max(hall_weekly_avg["Weekday"], hall_weekly_avg["Weekend"]) + 20, 10
+        )
+    )
+    ax3.set_ylabel("Average pm2.5atm")
+    ax3.set_title("Average pm2.5atm - Kitchen")
     ax3.grid(alpha=0.5)
-    ax3.set_yticks(np.arange(0, max(kitchen_weekly_avg['Weekday'], kitchen_weekly_avg['Weekend']) + 20, 10))
-    ax3.set_xlabel('Day Type')
-    plt.suptitle('Average pm2.5atm for Weekday vs Weekend for Each Room')
+    ax3.set_yticks(
+        np.arange(
+            0,
+            max(kitchen_weekly_avg["Weekday"], kitchen_weekly_avg["Weekend"]) + 20,
+            10,
+        )
+    )
+    ax3.set_xlabel("Day Type")
+    plt.suptitle("Average pm2.5atm for Weekday vs Weekend for Each Room")
     plt.tight_layout()
 
     # Save the plot
-    os.makedirs(f'{PLOT_DIR}/Weekday_vs_Weekend_Comparison', exist_ok=True)
-    plt.savefig(f'{PLOT_DIR}/Weekday_vs_Weekend_Comparison/weekday_weekend_comparison.png', dpi=300, bbox_inches='tight')
+    os.makedirs(f"{PLOT_DIR}/Weekday_vs_Weekend_Comparison", exist_ok=True)
+    plt.savefig(
+        f"{PLOT_DIR}/Weekday_vs_Weekend_Comparison/weekday_weekend_comparison.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.show()
-
-
-# --- Code cell 24 ---
-# Call the function
-weekdays_vs_weekends_comparison(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
 
 
 # --- Markdown cell 25 ---
 # ## Percentage Time Above Guidelines (Exposure Burden)
 # #### Calculate for each room:
-# - % time `pm2.5atm` > 25 µg/m³ (WHO)
+# - % time `pm2.5atm` > 15 µg/m³ (WHO)
 # - % time `pm2.5atm` > 60 µg/m³ (India 24-hr NAAQS)
 # - % change change in `pm2.5atm` from the previous measurement for each room
 # #### Plot
-# - print % time `pm2.5atm` > 25 µg/m³ (WHO)
+# - print % time `pm2.5atm` > 15 µg/m³ (WHO)
 # - print% time `pm2.5atm` > 60 µg/m³ (India 24*hr NAAQS)
 # - line graph showing '% change in `pm2.5atm` from the previous measurement for each room'
 
@@ -579,7 +978,7 @@ def percentage_time_above_guidelines(kitchen_df=None, hall_df=None, bedroom_df=N
     """
     Report and plot exposure burden relative to guideline thresholds.
 
-    Calculates percent time above WHO 25 µg/m³ and India NAAQS 60 µg/m³,
+    Calculates percent time above WHO 15 µg/m³ and India NAAQS 60 µg/m³,
     then visualizes percent change over time.
     """
     if kitchen_df is None:
@@ -589,68 +988,115 @@ def percentage_time_above_guidelines(kitchen_df=None, hall_df=None, bedroom_df=N
     if bedroom_df is None:
         raise ValueError("bedroom_df is None")
 
+    # Reset index to convert DateTime from index to column
+    bedroom_df = bedroom_df.reset_index().copy()
+    hall_df = hall_df.reset_index().copy()
+    kitchen_df = kitchen_df.reset_index().copy()
+
     # Keep only time and PM2.5 columns for threshold checks.
-    bedroom_percent_df = bedroom_df[['DateTime', 'pm2.5atm']]
-    hall_percent_df = hall_df[['DateTime', 'pm2.5atm']]
-    kitchen_percent_df = kitchen_df[['DateTime', 'pm2.5atm']]
+    bedroom_percent_df = bedroom_df[["DateTime", "pm2.5atm"]]
+    hall_percent_df = hall_df[["DateTime", "pm2.5atm"]]
+    kitchen_percent_df = kitchen_df[["DateTime", "pm2.5atm"]]
 
     # Remove outliers before calculating exceedance percentages.
-    bedroom_percent_df = remove_outliers_iqr(bedroom_percent_df, 'pm2.5atm', 200)
-    hall_percent_df = remove_outliers_iqr(hall_percent_df, 'pm2.5atm', 1500)
-    kitchen_percent_df = remove_outliers_iqr(kitchen_percent_df, 'pm2.5atm', 1500)
+    bedroom_percent_df = remove_outliers_iqr(bedroom_percent_df, "pm2.5atm", 200)
+    hall_percent_df = remove_outliers_iqr(hall_percent_df, "pm2.5atm", 1500)
+    kitchen_percent_df = remove_outliers_iqr(kitchen_percent_df, "pm2.5atm", 1500)
 
-    # Percentage of time above WHO guideline (25 µg/m³).
-    bedroom_percent_over_25 = (bedroom_percent_df['pm2.5atm'] > 25).sum() / len(bedroom_percent_df) * 100
-    hall_percent_over_25 = (hall_percent_df['pm2.5atm'] > 25).sum() / len(hall_percent_df) * 100
-    kitchen_percent_over_25 = (kitchen_percent_df['pm2.5atm'] > 25).sum() / len(kitchen_percent_df) * 100
-    print(f"Percentage of time pm2.5atm exceeds 25 μg/m³ - Bedroom: {bedroom_percent_over_25:.2f}%")
-    print(f"Percentage of time pm2.5atm exceeds 25 μg/m³ - Hall: {hall_percent_over_25:.2f}%")
-    print(f"Percentage of time pm2.5atm exceeds 25 μg/m³ - Kitchen: {kitchen_percent_over_25:.2f}%")
+    # Percentage of time above WHO guideline (15 µg/m³).
+    bedroom_percent_over_25 = (
+        (bedroom_percent_df["pm2.5atm"] > 15).sum() / len(bedroom_percent_df) * 100
+    )
+    hall_percent_over_25 = (
+        (hall_percent_df["pm2.5atm"] > 15).sum() / len(hall_percent_df) * 100
+    )
+    kitchen_percent_over_25 = (
+        (kitchen_percent_df["pm2.5atm"] > 15).sum() / len(kitchen_percent_df) * 100
+    )
+    print(
+        f"Percentage of time pm2.5atm exceeds 15 μg/m³ - Bedroom: {bedroom_percent_over_25:.2f}%"
+    )
+    print(
+        f"Percentage of time pm2.5atm exceeds 15 μg/m³ - Hall: {hall_percent_over_25:.2f}%"
+    )
+    print(
+        f"Percentage of time pm2.5atm exceeds 15 μg/m³ - Kitchen: {kitchen_percent_over_25:.2f}%"
+    )
 
     # Percentage of time above India NAAQS 24-hr guideline (60 µg/m³).
-    bedroom_percent_over_60 = (bedroom_percent_df['pm2.5atm'] > 60).sum() / len(bedroom_percent_df) * 100
-    hall_percent_over_60 = (hall_percent_df['pm2.5atm'] > 60).sum() / len(hall_percent_df) * 100
-    kitchen_percent_over_60 = (kitchen_percent_df['pm2.5atm'] > 60).sum() / len(kitchen_percent_df) * 100
-    print(f"Percentage of time pm2.5atm exceeds 60 μg/m³ - Bedroom: {bedroom_percent_over_60:.2f}%")
-    print(f"Percentage of time pm2.5atm exceeds 60 μg/m³ - Hall: {hall_percent_over_60:.2f}%")
-    print(f"Percentage of time pm2.5atm exceeds 60 μg/m³ - Kitchen: {kitchen_percent_over_60:.2f}%")
+    bedroom_percent_over_60 = (
+        (bedroom_percent_df["pm2.5atm"] > 60).sum() / len(bedroom_percent_df) * 100
+    )
+    hall_percent_over_60 = (
+        (hall_percent_df["pm2.5atm"] > 60).sum() / len(hall_percent_df) * 100
+    )
+    kitchen_percent_over_60 = (
+        (kitchen_percent_df["pm2.5atm"] > 60).sum() / len(kitchen_percent_df) * 100
+    )
+    print(
+        f"Percentage of time pm2.5atm exceeds 60 μg/m³ - Bedroom: {bedroom_percent_over_60:.2f}%"
+    )
+    print(
+        f"Percentage of time pm2.5atm exceeds 60 μg/m³ - Hall: {hall_percent_over_60:.2f}%"
+    )
+    print(
+        f"Percentage of time pm2.5atm exceeds 60 μg/m³ - Kitchen: {kitchen_percent_over_60:.2f}%"
+    )
 
     # Percent change highlights sudden spikes or drops between consecutive readings.
-    bedroom_percent_df['Percent Change'] = bedroom_percent_df['pm2.5atm'].pct_change() * 100
-    hall_percent_df['Percent Change'] = hall_percent_df['pm2.5atm'].pct_change() * 100
-    kitchen_percent_df['Percent Change'] = kitchen_percent_df['pm2.5atm'].pct_change() * 100
+    bedroom_percent_df["Percent Change"] = (
+        bedroom_percent_df["pm2.5atm"].pct_change() * 100
+    )
+    hall_percent_df["Percent Change"] = hall_percent_df["pm2.5atm"].pct_change() * 100
+    kitchen_percent_df["Percent Change"] = (
+        kitchen_percent_df["pm2.5atm"].pct_change() * 100
+    )
 
     # Plot the percent change in `pm2.5atm` for each room in a subplot with a shared x-axis
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 10), sharex=True)
-    ax1.plot(bedroom_percent_df['DateTime'], bedroom_percent_df['Percent Change'], label='Bedroom', color='blue')
-    ax1.set_ylabel('Percent Change in pm2.5atm')
-    ax1.set_title('Percent Change in pm2.5atm - Bedroom')
+    ax1.plot(
+        bedroom_percent_df["DateTime"],
+        bedroom_percent_df["Percent Change"],
+        label="Bedroom",
+        color="blue",
+    )
+    ax1.set_ylabel("Percent Change in pm2.5atm")
+    ax1.set_title("Percent Change in pm2.5atm - Bedroom")
     ax1.legend()
     ax1.grid(alpha=0.3)
 
-    ax2.plot(hall_percent_df['DateTime'], hall_percent_df['Percent Change'], label='Hall', color='orange')
-    ax2.set_ylabel('Percent Change in pm2.5atm')
-    ax2.set_title('Percent Change in pm2.5atm - Hall')
+    ax2.plot(
+        hall_percent_df["DateTime"],
+        hall_percent_df["Percent Change"],
+        label="Hall",
+        color="orange",
+    )
+    ax2.set_ylabel("Percent Change in pm2.5atm")
+    ax2.set_title("Percent Change in pm2.5atm - Hall")
     ax2.legend()
     ax2.grid(alpha=0.3)
 
-    ax3.plot(kitchen_percent_df['DateTime'], kitchen_percent_df['Percent Change'], label='Kitchen', color='green')
-    ax3.set_xlabel('DateTime')
-    ax3.set_ylabel('Percent Change in pm2.5atm')
-    ax3.set_title('Percent Change in pm2.5atm - Kitchen')
+    ax3.plot(
+        kitchen_percent_df["DateTime"],
+        kitchen_percent_df["Percent Change"],
+        label="Kitchen",
+        color="green",
+    )
+    ax3.set_xlabel("DateTime")
+    ax3.set_ylabel("Percent Change in pm2.5atm")
+    ax3.set_title("Percent Change in pm2.5atm - Kitchen")
     ax3.legend()
     ax3.grid(alpha=0.3)
-    plt.suptitle('Percent Change in pm2.5atm for Each Room')
+    plt.suptitle("Percent Change in pm2.5atm for Each Room")
 
     # Save the plot
-    os.makedirs(f'{PLOT_DIR}/Percent_Change_Trend_Plot', exist_ok=True)
-    plt.savefig(f'{PLOT_DIR}/Percent_Change_Trend_Plot/percent_change_trend.png', dpi=300, bbox_inches='tight')
+    os.makedirs(f"{PLOT_DIR}/Percent_Change_Trend_Plot", exist_ok=True)
+    plt.savefig(
+        f"{PLOT_DIR}/Percent_Change_Trend_Plot/percent_change_trend.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.show()
-
-
-# --- Code cell 27 ---
-# Call the function
-percentage_time_above_guidelines(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
 
 
 # --- Markdown cell 28 ---
@@ -667,58 +1113,81 @@ percentage_time_above_guidelines(kitchen_df=kitchen_df, hall_df=hall_df, bedroom
 
 
 # --- Code cell 29 ---
-def peak_event_analysis(kitchen_df=None, hall_df=None, bedroom_df=None, kitchen_peak_threshold=300, hall_peak_threshold=300, bedroom_peak_threshold=150):
-    """
-    Identify and summarize PM2.5 peak events for each room.
-
-    A peak event is defined as consecutive readings above a room-specific
-    threshold. The function reports counts, durations, and maximum values,
-    and saves summary CSV files.
-    """
+def peak_event_analysis(
+    kitchen_df=None,
+    hall_df=None,
+    bedroom_df=None,
+    kitchen_base_avg=None,
+    hall_base_avg=None,
+    bedroom_base_avg=None,
+):
     if kitchen_df is None:
         raise ValueError("kitchen_df is None")
     if hall_df is None:
         raise ValueError("hall_df is None")
     if bedroom_df is None:
         raise ValueError("bedroom_df is None")
+    if kitchen_base_avg is None:
+        raise ValueError("kitchen_base_avg is None")
+    if hall_base_avg is None:
+        raise ValueError("hall_base_avg is None")
+    if bedroom_base_avg is None:
+        raise ValueError("bedroom_base_avg is None")
 
-    # Keep only time and PM2.5 columns for event detection.
-    bedroom_peak_df = bedroom_df[["DateTime", "pm2.5atm"]]
-    hall_peak_df = hall_df[["DateTime", "pm2.5atm"]]
-    kitchen_peak_df = kitchen_df[["DateTime", "pm2.5atm"]]
+    # Reset index to convert DateTime from index to column
+    kitchen_df = kitchen_df.reset_index().copy()
+    hall_df = hall_df.reset_index().copy()
+    bedroom_df = bedroom_df.reset_index().copy()
 
-    # Remove outliers from the original dataframes before adding the Peak Event field
-    bedroom_peak_df = remove_outliers_iqr(bedroom_peak_df, "pm2.5atm", 200)
-    hall_peak_df = remove_outliers_iqr(hall_peak_df, "pm2.5atm", 1500)
-    kitchen_peak_df = remove_outliers_iqr(kitchen_peak_df, "pm2.5atm", 1500)
+    # Create a list of only the 'DateTime' and `pm2.5atm` columns for each room
+    kitchen_peak_df = kitchen_df[["DateTime", "pm2.5atm"]].copy()
+    hall_peak_df = hall_df[["DateTime", "pm2.5atm"]].copy()
+    bedroom_peak_df = bedroom_df[["DateTime", "pm2.5atm"]].copy()
 
-    # Add a day column for per-day grouping.
-    bedroom_peak_df["Day"] = bedroom_peak_df["DateTime"].dt.strftime("%Y-%m-%d")
-    hall_peak_df["Day"] = hall_peak_df["DateTime"].dt.strftime("%Y-%m-%d")
-    kitchen_peak_df["Day"] = kitchen_peak_df["DateTime"].dt.strftime("%Y-%m-%d")
+    # Convert DateTime to datetime type and set as index
+    kitchen_peak_df["DateTime"] = pd.to_datetime(kitchen_peak_df["DateTime"])
+    hall_peak_df["DateTime"] = pd.to_datetime(hall_peak_df["DateTime"])
+    bedroom_peak_df["DateTime"] = pd.to_datetime(bedroom_peak_df["DateTime"])
 
-    # Flag rows that exceed the room-specific threshold.
-    bedroom_peak_df["Peak Event"] = bedroom_peak_df["pm2.5atm"] > bedroom_peak_threshold
-    hall_peak_df["Peak Event"] = hall_peak_df["pm2.5atm"] > hall_peak_threshold
-    kitchen_peak_df["Peak Event"] = kitchen_peak_df["pm2.5atm"] > kitchen_peak_threshold
+    kitchen_peak_df.set_index("DateTime", inplace=True)
+    hall_peak_df.set_index("DateTime", inplace=True)
+    bedroom_peak_df.set_index("DateTime", inplace=True)
+
+    # Create a new column to identify peak events for each room based provided base average (average of 5am-6am and 4pm-5pm) for each room. A peak event is defined as a time when `pm2.5atm` exceeds the base average for that room.
+    kitchen_peak_df["Peak Event"] = kitchen_peak_df["pm2.5atm"] > kitchen_base_avg
+    hall_peak_df["Peak Event"] = hall_peak_df["pm2.5atm"] > hall_base_avg
+    bedroom_peak_df["Peak Event"] = bedroom_peak_df["pm2.5atm"] > bedroom_base_avg
 
     # Ensure that data frames are sorted by DateTime
-    bedroom_peak_df.sort_values(by="DateTime", inplace=True)
-    hall_peak_df.sort_values(by="DateTime", inplace=True)
-    kitchen_peak_df.sort_values(by="DateTime", inplace=True)
+    kitchen_peak_df.sort_index(inplace=True)
+    hall_peak_df.sort_index(inplace=True)
+    bedroom_peak_df.sort_index(inplace=True)
 
-    # Identify start of a peak event when a True follows a False.
-    bedroom_peak_df["Peak Start"] = (bedroom_peak_df["Peak Event"] == True) & (bedroom_peak_df["Peak Event"].shift(1) == False)
-    hall_peak_df["Peak Start"] = (hall_peak_df["Peak Event"] == True) & (hall_peak_df["Peak Event"].shift(1) == False)
-    kitchen_peak_df["Peak Start"] = (kitchen_peak_df["Peak Event"] == True) & (kitchen_peak_df["Peak Event"].shift(1) == False)
+    # Create a new column for the date (without time) in each dataframe
+    kitchen_peak_df["Date"] = kitchen_peak_df.index.date
+    hall_peak_df["Date"] = hall_peak_df.index.date
+    bedroom_peak_df["Date"] = bedroom_peak_df.index.date
+
+    # Identify Peack Start
+    bedroom_peak_df["Peak Start"] = (bedroom_peak_df["Peak Event"] == True) & (
+        bedroom_peak_df["Peak Event"].shift(1) == False
+    )
+    hall_peak_df["Peak Start"] = (hall_peak_df["Peak Event"] == True) & (
+        hall_peak_df["Peak Event"].shift(1) == False
+    )
+    kitchen_peak_df["Peak Start"] = (kitchen_peak_df["Peak Event"] == True) & (
+        kitchen_peak_df["Peak Event"].shift(1) == False
+    )
 
     # Assign a unique ID to each peak event
     bedroom_peak_df["Peak ID"] = bedroom_peak_df["Peak Start"].cumsum()
     hall_peak_df["Peak ID"] = hall_peak_df["Peak Start"].cumsum()
     kitchen_peak_df["Peak ID"] = kitchen_peak_df["Peak Start"].cumsum()
 
-    # Keep all days in the dataset so days with zero peaks remain visible.
-    all_days = pd.date_range(start=bedroom_peak_df["Day"].min(), end=bedroom_peak_df["Day"].max()).strftime("%Y-%m-%d")
+    # All days in the dataset for each room to ensure we keep days with no peak events in the analysis
+    all_days = pd.date_range(
+        start=bedroom_peak_df["Date"].min(), end=bedroom_peak_df["Date"].max()
+    ).date
 
     # Remove non peak events
     bedroom_peak_df = bedroom_peak_df[bedroom_peak_df["Peak Event"] == True]
@@ -726,73 +1195,327 @@ def peak_event_analysis(kitchen_df=None, hall_df=None, bedroom_df=None, kitchen_
     kitchen_peak_df = kitchen_peak_df[kitchen_peak_df["Peak Event"] == True]
 
     # Count number of peak events per day for each room
-    bedroom_peak_events_per_day = bedroom_peak_df.groupby("Day")["Peak ID"].nunique().reset_index(name="Peak Events")
-    hall_peak_events_per_day = hall_peak_df.groupby("Day")["Peak ID"].nunique().reset_index(name="Peak Events")
-    kitchen_peak_events_per_day = kitchen_peak_df.groupby("Day")["Peak ID"].nunique().reset_index(name="Peak Events")
+    bedroom_peak_events_per_day = (
+        bedroom_peak_df.groupby("Date")["Peak ID"]
+        .nunique()
+        .reset_index(name="Peak Events")
+    )
+    hall_peak_events_per_day = (
+        hall_peak_df.groupby("Date")["Peak ID"]
+        .nunique()
+        .reset_index(name="Peak Events")
+    )
+    kitchen_peak_events_per_day = (
+        kitchen_peak_df.groupby("Date")["Peak ID"]
+        .nunique()
+        .reset_index(name="Peak Events")
+    )
     # Keep days with no peak events as well
-    bedroom_peak_events_per_day = bedroom_peak_events_per_day.set_index("Day").reindex(all_days, fill_value=0).reset_index()
-    hall_peak_events_per_day = hall_peak_events_per_day.set_index("Day").reindex(all_days, fill_value=0).reset_index()
-    kitchen_peak_events_per_day = kitchen_peak_events_per_day.set_index("Day").reindex(all_days, fill_value=0).reset_index()
+    bedroom_peak_events_per_day = (
+        bedroom_peak_events_per_day.set_index("Date")
+        .reindex(all_days, fill_value=0)
+        .reset_index()
+        .rename(columns={"index": "Date"})
+    )
+    hall_peak_events_per_day = (
+        hall_peak_events_per_day.set_index("Date")
+        .reindex(all_days, fill_value=0)
+        .reset_index()
+        .rename(columns={"index": "Date"})
+    )
+    kitchen_peak_events_per_day = (
+        kitchen_peak_events_per_day.set_index("Date")
+        .reindex(all_days, fill_value=0)
+        .reset_index()
+        .rename(columns={"index": "Date"})
+    )
 
-    # Calculate duration (minutes) of each peak event.
-    bedroom_peak_duration = bedroom_peak_df.groupby(["Day", "Peak ID"])["DateTime"].agg(["min", "max"]).reset_index()
-    hall_peak_duration = hall_peak_df.groupby(["Day", "Peak ID"])["DateTime"].agg(["min", "max"]).reset_index()
-    kitchen_peak_duration = kitchen_peak_df.groupby(["Day", "Peak ID"])["DateTime"].agg(["min", "max"]).reset_index()
-    bedroom_peak_duration["Duration (minutes)"] = (bedroom_peak_duration["max"] - bedroom_peak_duration["min"]).dt.total_seconds() / 60
-    hall_peak_duration["Duration (minutes)"] = (hall_peak_duration["max"] - hall_peak_duration["min"]).dt.total_seconds() / 60
-    kitchen_peak_duration["Duration (minutes)"] = (kitchen_peak_duration["max"] - kitchen_peak_duration["min"]).dt.total_seconds() / 60
+    # Calculate Duration of Each Peak Event with Day
+    bedroom_peak_duration = (
+        bedroom_peak_df.reset_index()
+        .groupby(["Date", "Peak ID"])
+        .agg(min_time=("DateTime", "min"), max_time=("DateTime", "max"))
+        .reset_index()
+    )
+    hall_peak_duration = (
+        hall_peak_df.reset_index()
+        .groupby(["Date", "Peak ID"])
+        .agg(min_time=("DateTime", "min"), max_time=("DateTime", "max"))
+        .reset_index()
+    )
+    kitchen_peak_duration = (
+        kitchen_peak_df.reset_index()
+        .groupby(["Date", "Peak ID"])
+        .agg(min_time=("DateTime", "min"), max_time=("DateTime", "max"))
+        .reset_index()
+    )
+    bedroom_peak_duration["Duration (minutes)"] = (
+        bedroom_peak_duration["max_time"] - bedroom_peak_duration["min_time"]
+    ).dt.total_seconds() / 60
+    hall_peak_duration["Duration (minutes)"] = (
+        hall_peak_duration["max_time"] - hall_peak_duration["min_time"]
+    ).dt.total_seconds() / 60
+    kitchen_peak_duration["Duration (minutes)"] = (
+        kitchen_peak_duration["max_time"] - kitchen_peak_duration["min_time"]
+    ).dt.total_seconds() / 60
     # Replace 0.0 with 1/60 to avoid zero duration
-    bedroom_peak_duration["Duration (minutes)"] = bedroom_peak_duration["Duration (minutes)"].replace(0.0, 1/60)
-    hall_peak_duration["Duration (minutes)"] = hall_peak_duration["Duration (minutes)"].replace(0.0, 1/60)
-    kitchen_peak_duration["Duration (minutes)"] = kitchen_peak_duration["Duration (minutes)"].replace(0.0, 1/60)
+    bedroom_peak_duration["Duration (minutes)"] = bedroom_peak_duration[
+        "Duration (minutes)"
+    ].replace(0.0, 1 / 60)
+    hall_peak_duration["Duration (minutes)"] = hall_peak_duration[
+        "Duration (minutes)"
+    ].replace(0.0, 1 / 60)
+    kitchen_peak_duration["Duration (minutes)"] = kitchen_peak_duration[
+        "Duration (minutes)"
+    ].replace(0.0, 1 / 60)
 
     # Maximum Peak Concentration Per Day
-    bedroom_peak_max = bedroom_peak_df.groupby("Day")["pm2.5atm"].max().reset_index(name="Max pm2.5atm")
-    hall_peak_max = hall_peak_df.groupby("Day")["pm2.5atm"].max().reset_index(name="Max pm2.5atm")
-    kitchen_peak_max = kitchen_peak_df.groupby("Day")["pm2.5atm"].max().reset_index(name="Max pm2.5atm")
+    bedroom_peak_max = (
+        bedroom_peak_df.groupby("Date")["pm2.5atm"]
+        .max()
+        .reset_index(name="Max pm2.5atm")
+    )
+    hall_peak_max = (
+        hall_peak_df.groupby("Date")["pm2.5atm"].max().reset_index(name="Max pm2.5atm")
+    )
+    kitchen_peak_max = (
+        kitchen_peak_df.groupby("Date")["pm2.5atm"]
+        .max()
+        .reset_index(name="Max pm2.5atm")
+    )
 
     # Save the peak event analysis results to CSV files
-    os.makedirs(f'{PLOT_DIR}/Peak_Event_Analysis', exist_ok=True)
+    os.makedirs(f"{PLOT_DIR}/Peak_Event_Analysis", exist_ok=True)
 
     # Number of peak events per day for each room
-    bedroom_peak_events_per_day.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/bedroom_peak_events_per_day.csv', index=False)
-    hall_peak_events_per_day.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/hall_peak_events_per_day.csv', index=False)
-    kitchen_peak_events_per_day.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/kitchen_peak_events_per_day.csv', index=False)
+    bedroom_peak_events_per_day.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/bedroom_peak_events_per_day.csv", index=False
+    )
+    hall_peak_events_per_day.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/hall_peak_events_per_day.csv", index=False
+    )
+    kitchen_peak_events_per_day.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/kitchen_peak_events_per_day.csv", index=False
+    )
 
     # Duration of each peak event for each room
-    bedroom_peak_duration.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/bedroom_peak_duration.csv', index=False)
-    hall_peak_duration.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/hall_peak_duration.csv', index=False)
-    kitchen_peak_duration.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/kitchen_peak_duration.csv', index=False)
+    bedroom_peak_duration.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/bedroom_peak_duration.csv", index=False
+    )
+    hall_peak_duration.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/hall_peak_duration.csv", index=False
+    )
+    kitchen_peak_duration.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/kitchen_peak_duration.csv", index=False
+    )
 
     # Maximum peak concentration per day for each room
-    bedroom_peak_max.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/bedroom_peak_max.csv', index=False)
-    hall_peak_max.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/hall_peak_max.csv', index=False)
-    kitchen_peak_max.to_csv(f'{PLOT_DIR}/Peak_Event_Analysis/kitchen_peak_max.csv', index=False)
+    bedroom_peak_max.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/bedroom_peak_max.csv", index=False
+    )
+    hall_peak_max.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/hall_peak_max.csv", index=False
+    )
+    kitchen_peak_max.to_csv(
+        f"{PLOT_DIR}/Peak_Event_Analysis/kitchen_peak_max.csv", index=False
+    )
 
     # For each room print total number of peak events, average duration of peak events, max duration of peak events, and average maximum concentration, max maximum concentration during peak events
     # Bedroom
-    print(f"Total number of peak events - Bedroom: {bedroom_peak_df['Peak ID'].nunique()}")
-    print(f"Average duration of peak events (minutes) - Bedroom: {bedroom_peak_duration['Duration (minutes)'].mean():.2f}")
-    print(f"Max duration of peak events (minutes) - Bedroom: {bedroom_peak_duration['Duration (minutes)'].max():.2f}")
-    print(f"Average maximum concentration during peak events (µg/m³) - Bedroom: {bedroom_peak_max['Max pm2.5atm'].mean():.2f}")
-    print(f"Max maximum concentration during peak events (µg/m³) - Bedroom: {bedroom_peak_max['Max pm2.5atm'].max():.2f}")
+    print(
+        f"Total number of peak events - Bedroom: {bedroom_peak_df['Peak ID'].nunique()}"
+    )
+    print(
+        f"Average duration of peak events (minutes) - Bedroom: {bedroom_peak_duration['Duration (minutes)'].mean():.2f}"
+    )
+    print(
+        f"Max duration of peak events (minutes) - Bedroom: {bedroom_peak_duration['Duration (minutes)'].max():.2f}"
+    )
+    print(
+        f"Average maximum concentration during peak events (µg/m³) - Bedroom: {bedroom_peak_max['Max pm2.5atm'].mean():.2f}"
+    )
+    print(
+        f"Max maximum concentration during peak events (µg/m³) - Bedroom: {bedroom_peak_max['Max pm2.5atm'].max():.2f}"
+    )
     # Hall
     print(f"\nTotal number of peak events - Hall: {hall_peak_df['Peak ID'].nunique()}")
-    print(f"Average duration of peak events (minutes) - Hall: {hall_peak_duration['Duration (minutes)'].mean():.2f}")
-    print(f"Max duration of peak events (minutes) - Hall: {hall_peak_duration['Duration (minutes)'].max():.2f}")
-    print(f"Average maximum concentration during peak events (µg/m³) - Hall: {hall_peak_max['Max pm2.5atm'].mean():.2f}")
-    print(f"Max maximum concentration during peak events (µg/m³) - Hall: {hall_peak_max['Max pm2.5atm'].max():.2f}")
+    print(
+        f"Average duration of peak events (minutes) - Hall: {hall_peak_duration['Duration (minutes)'].mean():.2f}"
+    )
+    print(
+        f"Max duration of peak events (minutes) - Hall: {hall_peak_duration['Duration (minutes)'].max():.2f}"
+    )
+    print(
+        f"Average maximum concentration during peak events (µg/m³) - Hall: {hall_peak_max['Max pm2.5atm'].mean():.2f}"
+    )
+    print(
+        f"Max maximum concentration during peak events (µg/m³) - Hall: {hall_peak_max['Max pm2.5atm'].max():.2f}"
+    )
     # Kitchen
-    print(f"\nTotal number of peak events - Kitchen: {kitchen_peak_df['Peak ID'].nunique()}")
-    print(f"Average duration of peak events (minutes) - Kitchen: {kitchen_peak_duration['Duration (minutes)'].mean():.2f}")
-    print(f"Max duration of peak events (minutes) - Kitchen: {kitchen_peak_duration['Duration (minutes)'].max():.2f}")
-    print(f"Average maximum concentration during peak events (µg/m³) - Kitchen: {kitchen_peak_max['Max pm2.5atm'].mean():.2f}")
-    print(f"Max maximum concentration during peak events (µg/m³) - Kitchen: {kitchen_peak_max['Max pm2.5atm'].max():.2f}")
+    print(
+        f"\nTotal number of peak events - Kitchen: {kitchen_peak_df['Peak ID'].nunique()}"
+    )
+    print(
+        f"Average duration of peak events (minutes) - Kitchen: {kitchen_peak_duration['Duration (minutes)'].mean():.2f}"
+    )
+    print(
+        f"Max duration of peak events (minutes) - Kitchen: {kitchen_peak_duration['Duration (minutes)'].max():.2f}"
+    )
+    print(
+        f"Average maximum concentration during peak events (µg/m³) - Kitchen: {kitchen_peak_max['Max pm2.5atm'].mean():.2f}"
+    )
+    print(
+        f"Max maximum concentration during peak events (µg/m³) - Kitchen: {kitchen_peak_max['Max pm2.5atm'].max():.2f}"
+    )
 
+    # Plot the number of peak events per day for each room
+    plt.figure(figsize=(10, 5))
+    plt.plot(
+        kitchen_peak_events_per_day["Date"],
+        kitchen_peak_events_per_day["Peak Events"],
+        color=kitchen_colour,
+        label="Kitchen",
+        alpha=0.8,
+    )
+    plt.plot(
+        hall_peak_events_per_day["Date"],
+        hall_peak_events_per_day["Peak Events"],
+        color=hall_colour,
+        label="Hall",
+        alpha=0.8,
+    )
+    plt.plot(
+        bedroom_peak_events_per_day["Date"],
+        bedroom_peak_events_per_day["Peak Events"],
+        color=bedroom_colour,
+        label="Bedroom",
+        alpha=0.8,
+    )
+    plt.xlabel("Date")
+    plt.ylabel("Number of Peak Events")
+    plt.title("Number of Peak Events per Day")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    # Format x-axis to show date
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    plt.xticks(
+        ticks=all_days,
+        labels=[day.strftime("%Y-%m-%d") for day in all_days],
+        rotation=75,
+    )
+    # Save the plot
+    plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Peak_Event_Analysis"), exist_ok=True)
+    plt.savefig(
+        os.path.join(PLOT_DIR, "Peak_Event_Analysis", "Peak_Events_Per_Day.png")
+    )
+    # Show the plot
+    plt.show()
 
-# --- Code cell 30 ---
-# Call the function
-peak_event_analysis(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
+    # Plot the Average & Max duration of peak events for each room
+    plt.figure(figsize=(10, 5))
+    plt.plot(
+        kitchen_peak_duration.groupby("Date")["Duration (minutes)"].mean(),
+        color=kitchen_colour,
+        label="Kitchen - Average Duration",
+        alpha=0.8,
+    )
+    plt.plot(
+        hall_peak_duration.groupby("Date")["Duration (minutes)"].mean(),
+        color=hall_colour,
+        label="Hall - Average Duration",
+        alpha=0.8,
+    )
+    plt.plot(
+        bedroom_peak_duration.groupby("Date")["Duration (minutes)"].mean(),
+        color=bedroom_colour,
+        label="Bedroom - Average Duration",
+        alpha=0.8,
+    )
+    plt.plot(
+        kitchen_peak_duration.groupby("Date")["Duration (minutes)"].max(),
+        color=kitchen_colour,
+        linestyle="--",
+        alpha=0.8,
+        label="Kitchen - Max Duration",
+    )
+    plt.plot(
+        hall_peak_duration.groupby("Date")["Duration (minutes)"].max(),
+        color=hall_colour,
+        linestyle="--",
+        alpha=0.8,
+        label="Hall - Max Duration",
+    )
+    plt.plot(
+        bedroom_peak_duration.groupby("Date")["Duration (minutes)"].max(),
+        color=bedroom_colour,
+        linestyle="--",
+        alpha=0.8,
+        label="Bedroom - Max Duration",
+    )
+    plt.xlabel("Date")
+    plt.ylabel("Duration of Peak Events (minutes)")
+    plt.title("Duration of Peak Events per Day")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    # Format x-axis to show date
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    plt.xticks(
+        ticks=all_days,
+        labels=[day.strftime("%Y-%m-%d") for day in all_days],
+        rotation=75,
+    )
+    # Save the plot
+    plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Peak_Event_Analysis"), exist_ok=True)
+    plt.savefig(
+        os.path.join(PLOT_DIR, "Peak_Event_Analysis", "Peak_Event_Duration_Per_Day.png")
+    )
+    # Show the plot
+    plt.show()
+
+    # Plot the Average & Maximum concentration during peak events for each room
+    plt.figure(figsize=(10, 5))
+    plt.plot(
+        kitchen_peak_max.groupby("Date")["Max pm2.5atm"].mean(),
+        color=kitchen_colour,
+        label="Kitchen - Average maximum Concentration",
+        alpha=0.8,
+    )
+    plt.plot(
+        hall_peak_max.groupby("Date")["Max pm2.5atm"].mean(),
+        color=hall_colour,
+        label="Hall - Average maximum Concentration",
+        alpha=0.8,
+    )
+    plt.plot(
+        bedroom_peak_max.groupby("Date")["Max pm2.5atm"].mean(),
+        color=bedroom_colour,
+        label="Bedroom - Average maximum Concentration",
+        alpha=0.8,
+    )
+    plt.xlabel("Date")
+    plt.ylabel("PM2.5 Concentration During Peak Events (µg/m³)")
+    plt.title("Concentration During Peak Events per Day")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    # Format x-axis to show date
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    plt.xticks(
+        ticks=all_days,
+        labels=[day.strftime("%Y-%m-%d") for day in all_days],
+        rotation=75,
+    )
+    # Save the plot
+    plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Peak_Event_Analysis"), exist_ok=True)
+    plt.savefig(
+        os.path.join(
+            PLOT_DIR, "Peak_Event_Analysis", "Peak_Event_Concentration_Per_Day.png"
+        )
+    )
+    # Show the plot
+    plt.show()
 
 
 # --- Markdown cell 31 ---
@@ -847,43 +1570,52 @@ def get_total_hours(period):
     elif period == "Evening Cooking + Dinner":
         return 5  # 17-22
     else:
-        return 13 # remaining hours
+        return 13  # remaining hours
 
 
 def calculate_cooking_related_PM2_5_contribution_analysis(
-    room_df, room_name, peak_threshold, outliaer_threshold
+    room_name=None, room_df=None, room_colour=None, room_base_avg=None
 ):
-    """
-    Quantify PM2.5 contribution during cooking vs non-cooking periods.
+    if room_df is None:
+        raise ValueError("room_df is None")
+    if room_name is None:
+        raise ValueError("room_name is None")
+    if room_colour is None:
+        raise ValueError("room_colour is None")
+    if room_base_avg is None:
+        raise ValueError("room_base_avg is None")
 
-    Produces summary tables and a diurnal plot with shaded cooking windows.
-    """
+    # Reset index to convert DateTime from index to column
+    room_df = room_df.reset_index().copy()
+
     room_df = room_df[["DateTime", "pm2.5atm"]].copy()
-    room_df = remove_outliers_iqr(room_df, "pm2.5atm", outliaer_threshold)
+    room_df["DateTime"] = pd.to_datetime(room_df["DateTime"])
+
+    room_df["Time"] = room_df["DateTime"].dt.time
     room_df["Day"] = room_df["DateTime"].dt.strftime("%Y-%m-%d")
     room_df["Hour"] = room_df["DateTime"].dt.hour
     room_df["Minute"] = room_df["DateTime"].dt.minute
-    room_df["Time"] = room_df["DateTime"].dt.time
 
-    # Label each sample by cooking window.
     room_df["Period"] = room_df["Time"].apply(classify_period)
-    room_df["Peak Event"] = room_df["pm2.5atm"] > peak_threshold
 
-    # Compare mean/max/std of PM2.5 by cooking period.
+    # Identify peak events based on room_base_avg (average of 5am-6am and 4pm-5pm) for the room. A peak event is defined as a time when `pm2.5atm` exceeds the base average for that room.
+    room_df["Peak Event"] = room_df["pm2.5atm"] > room_base_avg
+
+    # Compare `Mean`, `Max`, `Standard Deviation` of `pm2.5atm` by Period
     period_stats = (
         room_df.groupby("Period")["pm2.5atm"].agg(["mean", "max", "std"]).reset_index()
     )
     print(f"\nPM2.5 Contribution Analysis for {room_name}:")
     print(period_stats)
 
-    # Peak frequency: number of measurements above the threshold per period.
+    # Compare peak frequency by Period
     peak_frequency = (
         room_df.groupby("Period")["Peak Event"].sum().reset_index(name="Peak Frequency")
     )
     print(f"\nPeak Frequency by Period for {room_name}:")
     print(peak_frequency)
 
-    # Exposure contribution by period (sum of PM2.5 values).
+    # Exposure contribution by Period (sum of pm2.5atm during peak events in each period)
     exposure_contribution_by_period = (
         room_df.groupby("Period")["pm2.5atm"]
         .sum()
@@ -893,8 +1625,7 @@ def calculate_cooking_related_PM2_5_contribution_analysis(
     exposure_contribution_by_period["Exposure Contribution (%)"] = (
         exposure_contribution_by_period["Exposure Contribution"] / exposure_total
     ) * 100
-    
-    # Normalize contributions by the total hours in each period.
+
     exposure_contribution_by_period["Exposure Contribution (%) per hour"] = (
         exposure_contribution_by_period["Exposure Contribution (%)"]
         / get_total_hours(exposure_contribution_by_period["Period"].values[0])
@@ -911,7 +1642,9 @@ def calculate_cooking_related_PM2_5_contribution_analysis(
         hourly_avg["Hour"],
         hourly_avg["pm2.5atm"],
         marker="o",
-        label="Hourly Average pm2.5atm",
+        label="Hourly Average PM2.5",
+        color=room_colour,
+        alpha=0.8,
     )
     plt.axvspan(
         6, 12, color="orange", alpha=0.3, label="Morning Cooking + Lunch Window"
@@ -919,28 +1652,23 @@ def calculate_cooking_related_PM2_5_contribution_analysis(
     plt.axvspan(
         17, 22, color="orange", alpha=0.3, label="Evening Cooking + Dinner Window"
     )
-    plt.title(f"Diurnal Variation of pm2.5atm with Cooking Windows - {room_name}")
+    plt.title(f"Diurnal Variation of PM2.5 with Cooking Windows - {room_name}")
     plt.xlabel("Hour of Day")
-    plt.ylabel("Average pm2.5atm (µg/m³)")
+    plt.ylabel("Average PM2.5 (µg/m³)")
     plt.xticks(range(0, 24))
     plt.grid(alpha=0.3)
     plt.legend()
     plt.tight_layout()
     # Save the plot
-    os.makedirs("data/Dhruv_Patel/Plots/Cooking_Contribution_Analysis", exist_ok=True)
+    os.makedirs(os.path.join(PLOT_DIR, "Cooking_Related_Analysis"), exist_ok=True)
     plt.savefig(
-        f"data/Dhruv_Patel/Plots/Cooking_Contribution_Analysis/{room_name.lower()}_cooking_contribution.png",
-        dpi=300,
-        bbox_inches="tight",
+        os.path.join(
+            PLOT_DIR,
+            "Cooking_Related_Analysis",
+            f"{room_name}_Diurnal_Cooking_Analysis.png",
+        )
     )
     plt.show()
-
-
-# --- Code cell 34 ---
-# Analyze cooking related PM2.5 contribution for each room
-calculate_cooking_related_PM2_5_contribution_analysis(bedroom_df, "Bedroom", 150, 200)
-calculate_cooking_related_PM2_5_contribution_analysis(hall_df, "Hall", 300, 1500)
-calculate_cooking_related_PM2_5_contribution_analysis(kitchen_df, "Kitchen", 300, 1500)
 
 
 # --- Markdown cell 35 ---
@@ -986,157 +1714,282 @@ def classify_period_simple(t):
         return "Non-Cooking"
 
 
-# --- Code cell 38 ---
-def decay_rate_after_cooking(kitchen_df=None):
-    """
-    Estimate PM2.5 decay after cooking events in the kitchen.
+def decay_rate_after_cooking(
+    room_df=None, room_colour=None, room_name=None, room_base_avg=None
+):
+    if room_df is None:
+        raise ValueError("room_df is None")
+    if room_colour is None:
+        raise ValueError("room_colour is None")
+    if room_name is None:
+        raise ValueError("room_name is None")
+    if room_base_avg is None:
+        raise ValueError("room_base_avg is None")
 
-    Finds major peaks, measures recovery time to a baseline threshold, and
-    plots a representative decay curve as a proxy for ventilation efficiency.
-    """
-    if kitchen_df is None:
-        raise ValueError('kitchen_df is None')
-    
-    # Focus only on time and PM2.5 columns.
-    kitchen_peak_threshold = 300 # µg/m³
-    kitchen_df_subset = kitchen_df[["DateTime", "pm2.5atm"]].copy()
-    # Remove outliers to stabilize baseline and peak detection.
-    kitchen_df_subset = remove_outliers_iqr(kitchen_df_subset, "pm2.5atm", 1500)
-    kitchen_df_subset["Day"] = kitchen_df_subset["DateTime"].dt.strftime("%Y-%m-%d")
-    kitchen_df_subset["Time"] = kitchen_df_subset["DateTime"].dt.time
-    kitchen_df_subset["Period"] = kitchen_df_subset["Time"].apply(classify_period_simple)
-    kitchen_df_subset = kitchen_df_subset.sort_values("DateTime").reset_index(drop=True).copy()
+    room_decay_df = room_df[["pm2.5atm"]].copy()
+    room_decay_df.index = pd.to_datetime(room_decay_df.index)
 
+    room_decay_df["Date"] = room_decay_df.index.date
+    room_decay_df["Time"] = room_decay_df.index.time
+    room_decay_df["Period"] = room_decay_df["Time"].apply(classify_period_simple)
 
-    # Calculate baseline using non-cooking periods.
-    baseline_margin = 0.40
-    daily_baseline = (
-        kitchen_df_subset[kitchen_df_subset["Period"] == "Non-Cooking"]
-        .groupby("Day")["pm2.5atm"]
-        .mean()
-        .reset_index(name="Baseline")
+    room_daily_avg = room_decay_df.groupby("Date")["pm2.5atm"].mean()
+    baseline_margin = 0.2
+
+    room_decay_df["DailyAvg"] = room_decay_df["Date"].map(room_daily_avg)
+    room_decay_df["Baseline"] = float(room_base_avg)
+
+    is_major = (room_decay_df["Period"] == "Cooking") & (
+        room_decay_df["pm2.5atm"] > room_decay_df["DailyAvg"]
     )
-    kitchen_df_subset = kitchen_df_subset.merge(daily_baseline, on="Day", how="left")
-    baseline_global = kitchen_df_subset[kitchen_df_subset["Period"] == "Non-Cooking"]["pm2.5atm"].mean()
-    kitchen_df_subset["Baseline"] = kitchen_df_subset["Baseline"].fillna(baseline_global)
-
-    # Identify major spikes within cooking periods.
-    is_major = (kitchen_df_subset["Period"] == "Cooking") & (kitchen_df_subset["pm2.5atm"] > kitchen_peak_threshold)
     start_of_event = is_major & ~is_major.shift(fill_value=False)
-    kitchen_df_subset["Event ID"] = start_of_event.cumsum()
-    kitchen_df_subset.loc[~is_major, "Event ID"] = np.nan
+    room_decay_df["Event ID"] = start_of_event.cumsum()
+    room_decay_df.loc[~is_major, "Event ID"] = np.nan
 
-    # Compute decay metrics per event.
     records = []
     max_decay_hours = 12
     min_consecutive_points = 3
+    min_decay_minutes = 10
+    sustained_recovery_minutes = 15
 
-    is_cooking = kitchen_df_subset["Period"].eq("Cooking")
-    cooking_start = is_cooking & ~is_cooking.shift(fill_value=False)
+    for event_id in room_decay_df["Event ID"].dropna().unique():
+        event_data = room_decay_df[room_decay_df["Event ID"] == event_id].sort_index()
+        if len(event_data) < 2:
+            continue
 
-    for eid, g in kitchen_df_subset.dropna(subset=["Event ID"]).groupby("Event ID"):
-        g = g.sort_values("DateTime")
-        peak_idx = g["pm2.5atm"].idxmax()
-        peak_time = kitchen_df_subset.loc[peak_idx, "DateTime"]
-        peak_val = kitchen_df_subset.loc[peak_idx, "pm2.5atm"]
-        base_val = kitchen_df_subset.loc[peak_idx, "Baseline"]
-        # Consider recovery when PM2.5 drops near baseline.
-        recovery_threshold = base_val * (1 + baseline_margin) + 20
+        event_end_time = event_data.index.max()
 
-        hard_end = peak_time + pd.Timedelta(hours=max_decay_hours)
-        next_cooking_start = kitchen_df_subset.loc[
-            (kitchen_df_subset["DateTime"] > peak_time) & cooking_start, "DateTime"
-        ].min()
+        # Use the overall event maximum as the peak — this is the true start of decay,
+        # not a tail-window anchor. The tail window approach was causing the peak to be
+        # misidentified as the first point of the plot window.
+        max_conc_time = event_data["pm2.5atm"].idxmax()
+        max_conc_value = float(event_data["pm2.5atm"].max())
+        max_conc_hour = max_conc_time.hour
+        max_conc_date = max_conc_time.date()
 
-        search_end = hard_end if pd.isna(next_cooking_start) else min(hard_end, next_cooking_start)
+        threshold = float(event_data["Baseline"].iloc[0]) * (1 + baseline_margin)
 
-        # Search for the first sustained recovery window after the peak.
-        after_peak = kitchen_df_subset[
-            (kitchen_df_subset["DateTime"] >= peak_time) &
-            (kitchen_df_subset["DateTime"] <= search_end)
-        ].copy()
-
-        below = after_peak["pm2.5atm"] <= recovery_threshold
-        consec = below.rolling(min_consecutive_points).sum() >= min_consecutive_points
-        recovery_row = after_peak[consec].head(1)
-
-
-        if len(recovery_row) > 0:
-            rec_time = recovery_row.iloc[0]["DateTime"]
-            rec_val = recovery_row.iloc[0]["pm2.5atm"]
-            duration_min = (rec_time - peak_time).total_seconds() / 60
-            slope = (rec_val - peak_val) / duration_min if duration_min > 0 else np.nan
+        search_window_end = max_conc_time + pd.Timedelta(hours=max_decay_hours)
+        next_cooking_candidates = room_decay_df[
+            (room_decay_df.index > event_end_time)
+            & (room_decay_df["Period"] == "Cooking")
+        ].index
+        if len(next_cooking_candidates) > 0:
+            next_cooking_start = next_cooking_candidates.min()
+            recovery_search_end = min(search_window_end, next_cooking_start)
         else:
-            rec_time, rec_val, duration_min, slope = pd.NaT, np.nan, np.nan, np.nan
+            recovery_search_end = search_window_end
 
-        records.append({
-            "event_id": int(eid),
-            "peak_time": peak_time,
-            "peak_value": peak_val,
-            "baseline": base_val,
-            "recovery_time": rec_time,
-            "recovery_value": rec_val,
-            "decay_duration_min": duration_min,
-            "decay_slope_ugm3_per_min": slope
-        })
+        # Slice from the true peak onwards for recovery search
+        post_peak_full = room_decay_df.loc[
+            max_conc_time:recovery_search_end, "pm2.5atm"
+        ]
+        if len(post_peak_full) < min_consecutive_points:
+            continue
 
-    decay_df = pd.DataFrame(records).sort_values("peak_time")
-    decay_df.head()
+        if len(post_peak_full) > 1:
+            minutes_per_row = (
+                post_peak_full.index[1] - post_peak_full.index[0]
+            ).total_seconds() / 60.0
+        else:
+            minutes_per_row = 30.0
+        sustained_points = max(1, round(sustained_recovery_minutes / minutes_per_row))
 
-    # Pick a representative event: longest recovery, fallback to highest peak.
-    if decay_df["decay_duration_min"].notna().any():
-        rep = decay_df.loc[decay_df["decay_duration_min"].idxmax()]
-    else:
-        rep = decay_df.loc[decay_df["peak_value"].idxmax()].iloc[0]
+        below_threshold_mask = post_peak_full <= threshold
+        sustained_below = (
+            below_threshold_mask.rolling(
+                window=sustained_points, min_periods=sustained_points
+            ).sum()
+            == sustained_points
+        )
+        recovery_candidates = sustained_below[sustained_below].index
+        if len(recovery_candidates) == 0:
+            continue
+        window_end_idx = post_peak_full.index.get_loc(recovery_candidates.min())
+        recovery_start_idx = max(0, window_end_idx - (sustained_points - 1))
+        recovery_point = post_peak_full.index[recovery_start_idx]
 
-    peak_time = rep["peak_time"]
-    recovery_time = rep["recovery_time"]
+        recovery_hour = recovery_point.hour
+        decay_duration = (recovery_point - max_conc_time).total_seconds() / 3600.0
 
-    if pd.notna(recovery_time):
-        plot_df = kitchen_df_subset[(kitchen_df_subset["DateTime"] >= peak_time) & (kitchen_df_subset["DateTime"] <= recovery_time)].copy()
-    else:
-        # fallback: plot 2 hours after peak if no recovery found
-        plot_df = kitchen_df_subset[(kitchen_df_subset["DateTime"] >= peak_time) & (kitchen_df_subset["DateTime"] <= peak_time + pd.Timedelta(hours=2))].copy()
+        if decay_duration <= 0 or decay_duration > max_decay_hours:
+            continue
+        if (decay_duration * 60) < min_decay_minutes:
+            continue
 
-    plt.figure(figsize=(12, 5))
-    plt.plot(plot_df["DateTime"], plot_df["pm2.5atm"], label="PM2.5", lw=2)
+        post_peak_data = post_peak_full.loc[max_conc_time:recovery_point]
+        if len(post_peak_data) < min_consecutive_points:
+            continue
 
-    # Peak point
-    plt.scatter(rep["peak_time"], rep["peak_value"], color="red", zorder=5, label="Peak maximum")
-    plt.axvline(rep["peak_time"], color="red", linestyle="--", alpha=0.6)
+        initial_conc = max_conc_value
+        final_conc = float(post_peak_data.iloc[-1])
+        decay_rate_per_hour = (initial_conc - final_conc) / decay_duration
+        decay_rate_per_minute = decay_rate_per_hour / 60.0
 
-    # Recovery point
-    if pd.notna(rep["recovery_time"]):
-        plt.scatter(rep["recovery_time"], rep["recovery_value"], color="green", zorder=5, label="Recovery point")
-        plt.axvline(rep["recovery_time"], color="green", linestyle="--", alpha=0.6)
-
-    # Baseline
-    plt.axhline(rep["baseline"], color="gray", linestyle=":", label="Baseline")
-
-    # Decay slope line (peak to recovery)
-    if pd.notna(rep["recovery_time"]):
-        plt.plot(
-            [rep["peak_time"], rep["recovery_time"]],
-            [rep["peak_value"], rep["recovery_value"]],
-            color="black",
-            linestyle="--",
-            label=f"Decay slope: {rep['decay_slope_ugm3_per_min']:.2f} ug/m3/min"
+        records.append(
+            {
+                "Event ID": event_id,
+                "Date": max_conc_date,
+                "Peak Time": max_conc_time,
+                "Peak Hour": max_conc_hour,
+                "Recovery Hour": recovery_hour,
+                "Recovery Time": recovery_point,
+                "Recovery Threshold": threshold,
+                "Decay Duration (hours)": decay_duration,
+                "Initial Concentration": initial_conc,
+                "Final Concentration": final_conc,
+                "Decay Rate (µg/m³/hour)": decay_rate_per_hour,
+                "Decay Rate (µg/m³/minute)": decay_rate_per_minute,
+            }
         )
 
-    plt.title("Representative PM2.5 Decay After Cooking")
+    decay_df = pd.DataFrame(records)
+    if decay_df.empty:
+        print(f"\nDecay Rate Analysis After Cooking Events in {room_name}:")
+        print("No valid decay events found.")
+        return decay_df
+
+    decay_df = decay_df.sort_values(by=["Date", "Peak Hour"]).reset_index(drop=True)
+
+    print(f"\nDecay Rate Analysis After Cooking Events in {room_name}:")
+    print(decay_df)
+    os.makedirs(os.path.join(PLOT_DIR, "Decay_Rate_Analysis"), exist_ok=True)
+    decay_df.to_csv(
+        os.path.join(
+            PLOT_DIR, "Decay_Rate_Analysis", f"{room_name}_Decay_Analysis.csv"
+        ),
+        index=False,
+    )
+
+    rep = decay_df.sort_values(
+        by=["Initial Concentration", "Decay Duration (hours)"],
+        ascending=[False, False],
+    ).iloc[0]
+
+    # Extract scalars from rep — no .loc lookups needed anywhere in plotting
+    peak_time = pd.to_datetime(rep["Peak Time"])
+    recovery_time = pd.to_datetime(rep["Recovery Time"])
+    initial_concentration = float(rep["Initial Concentration"])
+    final_concentration = float(rep["Final Concentration"])
+    recovery_threshold = float(rep["Recovery Threshold"])
+    decay_rate_per_hour = float(rep["Decay Rate (µg/m³/hour)"])
+    decay_rate_per_minute = float(rep["Decay Rate (µg/m³/minute)"])
+    peak_hour = int(rep["Peak Hour"])
+
+    # Plot window: start slightly before peak so the rise context is visible,
+    # end at recovery. This ensures peak_time sits inside the window, not at its edge.
+    plot_start = peak_time - pd.Timedelta(minutes=30)
+    event_data = room_decay_df.loc[plot_start:recovery_time].sort_index()
+    baseline_concentration = float(event_data["Baseline"].iloc[0])
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(
+        event_data.index,
+        event_data["pm2.5atm"],
+        marker="o",
+        label="PM2.5 Concentration",
+        color=room_colour,
+        alpha=0.8,
+    )
+
+    # Max Concentration line — drawn at the true peak value
+    plt.axhline(
+        y=initial_concentration,
+        color="red",
+        linestyle="-.",
+        label=f"Max Concentration ({initial_concentration:.1f} µg/m³)",
+        alpha=0.6,
+    )
+    plt.annotate(
+        f"Peak {initial_concentration:.1f}",
+        xy=(peak_time, initial_concentration),
+        xytext=(3, 5),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->", color="red"),
+        fontsize=9,
+        color="red",
+    )
+
+    # Recovery threshold line
+    plt.axhline(
+        y=final_concentration,
+        color="green",
+        linestyle="-.",
+        label=f"Recovery ({final_concentration:.1f} µg/m³)",
+        alpha=0.6,
+    )
+    plt.annotate(
+        f"Recovery {final_concentration:.1f}",
+        xy=(recovery_time, final_concentration),
+        xytext=(3, -15),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->", color="green"),
+        fontsize=9,
+        color="green",
+    )
+
+    # Baseline line
+    plt.axhline(
+        y=baseline_concentration,
+        color="blue",
+        linestyle="-.",
+        label=f"Baseline ({baseline_concentration:.1f} µg/m³)",
+        alpha=0.6,
+    )
+    plt.annotate(
+        f"Baseline {baseline_concentration:.1f}",
+        xy=(event_data.index[0], baseline_concentration),
+        xytext=(3, -15),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->", color="blue"),
+        fontsize=9,
+        color="blue",
+    )
+
+    # Decay slope line — from true peak to recovery point, both as datetimes
+    plt.plot(
+        [peak_time, recovery_time],
+        [initial_concentration, final_concentration],
+        color="black",
+        linestyle="--",
+        linewidth=1.5,
+        label=f"Decay Rate: {decay_rate_per_hour:.2f} µg/m³/hour, {decay_rate_per_minute:.2f} µg/m³/minute",
+        alpha=0.7,
+    )
+
+    mid_time = peak_time + (recovery_time - peak_time) / 2
+    mid_value = (initial_concentration + final_concentration) / 2
+    plt.annotate(
+        f"Decay Rate: {decay_rate_per_hour:.2f} µg/m³/hour\n{decay_rate_per_minute:.2f} µg/m³/minute",
+        xy=(mid_time, mid_value),
+        xytext=(-25, -50),
+        textcoords="offset points",
+        fontsize=9,
+        fontweight="bold",
+        color="black",
+        rotation=-35,
+    )
+
+    plt.title(
+        f"Decay Curve After Cooking Event on {rep['Date']} "
+        f"(Peak Hour: {peak_hour}) "
+        f"(Duration: {rep['Decay Duration (hours)']:.2f} hours, "
+        f"Decay Rate: {decay_rate_per_hour:.2f} µg/m³/hour, {decay_rate_per_minute:.2f} µg/m³/minute)",
+        fontweight="bold",
+    )
     plt.xlabel("Time")
-    plt.ylabel("PM2.5 (ug/m3)")
+    plt.ylabel("PM2.5 Concentration (µg/m³)")
     plt.legend()
     plt.tight_layout()
-    # Save plot
-    os.makedirs(f"{PLOT_DIR}/Decay_Rate", exist_ok=True)
-    plt.savefig(f"{PLOT_DIR}/Decay_Rate/Decay_Rate.png", dpi=300, bbox_inches="tight")
+    os.makedirs(os.path.join(PLOT_DIR, "Decay_Rate_Analysis"), exist_ok=True)
+    plt.savefig(
+        os.path.join(PLOT_DIR, "Decay_Rate_Analysis", f"{room_name}_Decay_Curve.png"),
+        dpi=600,
+        bbox_inches="tight",
+    )
     plt.show()
 
-
-# --- Code cell 39 ---
-# Call the function
-decay_rate_after_cooking(kitchen_df=kitchen_df)
+    return decay_df
 
 
 # --- Markdown cell 40 ---
@@ -1145,7 +1998,7 @@ decay_rate_after_cooking(kitchen_df=kitchen_df)
 # - Compare peak intensity across rooms
 # - Show attenuation (reduction %) from kitchen outward
 # - Visualize gradient clearly
-# 
+#
 # #### Steps:
 # - Combine All Room Data
 #   - Add column `Room` to all 3 Kitchen, Hall, Bedroom
@@ -1175,37 +2028,58 @@ def spatial_gradient_plot(kitchen_df=None, hall_df=None, bedroom_df=None):
     time-synchronized gradient plot.
     """
     if kitchen_df is None:
-        raise ValueError('kitchen_df is None')
+        raise ValueError("kitchen_df is None")
     if hall_df is None:
-        raise ValueError('hall_df is None')
+        raise ValueError("hall_df is None")
     if bedroom_df is None:
-        raise ValueError('bedroom_df is None')
-    
+        raise ValueError("bedroom_df is None")
+
+    # Reset index to convert DateTime from index to column
+    bedroom_df = bedroom_df.reset_index().copy()
+    hall_df = hall_df.reset_index().copy()
+    kitchen_df = kitchen_df.reset_index().copy()
+
     # Keep only time and PM2.5 columns for gradient calculations.
     bedroom_df_gradient = bedroom_df[["DateTime", "pm2.5atm"]].copy()
     hall_df_gradient = hall_df[["DateTime", "pm2.5atm"]].copy()
     kitchen_df_gradient = kitchen_df[["DateTime", "pm2.5atm"]].copy()
     # Remove outliers to avoid skewing gradients.
-    bedroom_df_gradient = remove_outliers_iqr(bedroom_df_gradient, 'pm2.5atm', 200)
-    hall_df_gradient = remove_outliers_iqr(hall_df_gradient, 'pm2.5atm', 1500)
-    kitchen_df_gradient = remove_outliers_iqr(kitchen_df_gradient, 'pm2.5atm', 1500)
+    bedroom_df_gradient = remove_outliers_iqr(bedroom_df_gradient, "pm2.5atm", 200)
+    hall_df_gradient = remove_outliers_iqr(hall_df_gradient, "pm2.5atm", 1500)
+    kitchen_df_gradient = remove_outliers_iqr(kitchen_df_gradient, "pm2.5atm", 1500)
     # Convert to minute-level data to align sensors.
-    bedroom_df_gradient['DateTime'] = bedroom_df_gradient['DateTime'].dt.floor('min')
-    hall_df_gradient['DateTime'] = hall_df_gradient['DateTime'].dt.floor('min')
-    kitchen_df_gradient['DateTime'] = kitchen_df_gradient['DateTime'].dt.floor('min')
+    bedroom_df_gradient["DateTime"] = bedroom_df_gradient["DateTime"].dt.floor("min")
+    hall_df_gradient["DateTime"] = hall_df_gradient["DateTime"].dt.floor("min")
+    kitchen_df_gradient["DateTime"] = kitchen_df_gradient["DateTime"].dt.floor("min")
     # Group by DateTime and take mean.
-    bedroom_df_gradient = bedroom_df_gradient.groupby(bedroom_df_gradient['DateTime'], as_index=False).mean().reset_index()
-    hall_df_gradient = hall_df_gradient.groupby(hall_df_gradient['DateTime'], as_index=False).mean().reset_index()
-    kitchen_df_gradient = kitchen_df_gradient.groupby(kitchen_df_gradient['DateTime'], as_index=False).mean().reset_index()
+    bedroom_df_gradient = (
+        bedroom_df_gradient.groupby(bedroom_df_gradient["DateTime"], as_index=False)
+        .mean()
+        .reset_index()
+    )
+    hall_df_gradient = (
+        hall_df_gradient.groupby(hall_df_gradient["DateTime"], as_index=False)
+        .mean()
+        .reset_index()
+    )
+    kitchen_df_gradient = (
+        kitchen_df_gradient.groupby(kitchen_df_gradient["DateTime"], as_index=False)
+        .mean()
+        .reset_index()
+    )
     # Add Room column for combined plotting.
     bedroom_df_gradient["Room"] = "Bedroom"
     hall_df_gradient["Room"] = "Hall"
     kitchen_df_gradient["Room"] = "Kitchen"
     # Combine all three dataframes
-    combined_df = pd.concat([kitchen_df_gradient, hall_df_gradient, bedroom_df_gradient])
+    combined_df = pd.concat(
+        [kitchen_df_gradient, hall_df_gradient, bedroom_df_gradient]
+    )
 
     # Room-wise summary statistics.
-    room_summary = combined_df.groupby("Room")["pm2.5atm"].agg(["mean", "max", "min", "std"])
+    room_summary = combined_df.groupby("Room")["pm2.5atm"].agg(
+        ["mean", "max", "min", "std"]
+    )
     print("Room-wise Summary of PM2.5 Levels:")
     print(room_summary)
 
@@ -1220,35 +2094,53 @@ def spatial_gradient_plot(kitchen_df=None, hall_df=None, bedroom_df=None):
 
     # Create spatial gradient plot during cooking only.
     # Classify periods as cooking or non-cooking.
-    combined_df["Period"] = combined_df["DateTime"].dt.time.apply(classify_period_simple)
+    combined_df["Period"] = combined_df["DateTime"].dt.time.apply(
+        classify_period_simple
+    )
     combined_df = combined_df[combined_df["Period"] != "Non-Cooking"]
     # Group by room and take mean.
     spatial_gradient_df = combined_df.groupby(["Room"])["pm2.5atm"].mean().reset_index()
     # Plot this
     plt.figure(figsize=(8, 5))
-    bars = plt.bar(spatial_gradient_df["Room"], spatial_gradient_df["pm2.5atm"], color=['red', 'orange', 'yellow'])
+    bars = plt.bar(
+        spatial_gradient_df["Room"],
+        spatial_gradient_df["pm2.5atm"],
+        color=["red", "orange", "yellow"],
+    )
     plt.title("Spatial Gradient of PM2.5 During Cooking Periods")
     plt.xlabel("Room")
     plt.ylabel("Average PM2.5 (ug/m3)")
     # Add value labels on bars
     for bar in bars:
         height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height, f'{height:.1f}', ha='center', va='bottom')
+        plt.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height,
+            f"{height:.1f}",
+            ha="center",
+            va="bottom",
+        )
     plt.tight_layout()
     # Save plot
     os.makedirs(f"{PLOT_DIR}/Spatial_Gradient_Plot", exist_ok=True)
-    plt.savefig(f"{PLOT_DIR}/Spatial_Gradient_Plot/Spatial_Gradient_During_Cooking.png", dpi=300, bbox_inches="tight")
+    plt.savefig(
+        f"{PLOT_DIR}/Spatial_Gradient_Plot/Spatial_Gradient_During_Cooking.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.show()
 
     # Plot Time Synchronized Gradient
-    pivot_df = combined_df.pivot_table(index="DateTime", columns="Room", values="pm2.5atm")
+    pivot_df = combined_df.pivot_table(
+        index="DateTime", columns="Room", values="pm2.5atm"
+    )
     # Compute differences
     pivot_df["Kitchen-Hall"] = pivot_df["Kitchen"] - pivot_df["Hall"]
     pivot_df["Hall-Bedroom"] = pivot_df["Hall"] - pivot_df["Bedroom"]
     # Plot this diffrence over time
     plt.figure(figsize=(15, 5))
-    plt.plot(pivot_df.index, pivot_df["Kitchen-Hall"], label="Kitchen-Hall", marker='o')
-    plt.plot(pivot_df.index, pivot_df["Hall-Bedroom"], label="Hall-Bedroom", marker='s')
+    plt.plot(pivot_df.index, pivot_df["Kitchen-Hall"], label="Kitchen-Hall", marker="o")
+    plt.plot(pivot_df.index, pivot_df["Hall-Bedroom"], label="Hall-Bedroom", marker="s")
     plt.title("Temporal Gradient of PM2.5 Between Rooms")
     plt.xlabel("Time")
     plt.ylabel("Difference in PM2.5 (ug/m3)")
@@ -1256,13 +2148,12 @@ def spatial_gradient_plot(kitchen_df=None, hall_df=None, bedroom_df=None):
     plt.tight_layout()
     # Save plot
     os.makedirs(f"{PLOT_DIR}/Spatial_Gradient_Plot", exist_ok=True)
-    plt.savefig(f"{PLOT_DIR}/Spatial_Gradient_Plot/Temporal_Gradient.png", dpi=300, bbox_inches="tight")
+    plt.savefig(
+        f"{PLOT_DIR}/Spatial_Gradient_Plot/Temporal_Gradient.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.show()
-
-
-# --- Code cell 42 ---
-# Call the function
-spatial_gradient_plot(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
 
 
 # --- Markdown cell 43 ---
@@ -1281,16 +2172,22 @@ def particle_size_distribution(kitchen_df=None, hall_df=None, bedroom_df=None):
     Outputs mean counts for different particle size bins across rooms.
     """
     if kitchen_df is None:
-        raise ValueError('kitchen_df is None')
+        raise ValueError("kitchen_df is None")
     if hall_df is None:
-        raise ValueError('hall_df is None')
+        raise ValueError("hall_df is None")
     if bedroom_df is None:
-        raise ValueError('bedroom_df is None')
-    
+        raise ValueError("bedroom_df is None")
+
     # Select particle count channels for each room.
-    kitchen_df_particals = kitchen_df[["c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000"]].copy()
-    hall_df_particals = hall_df[["c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000"]].copy()
-    bedroom_df_particals = bedroom_df[["c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000"]].copy()
+    kitchen_df_particals = kitchen_df[
+        ["c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000"]
+    ].copy()
+    hall_df_particals = hall_df[
+        ["c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000"]
+    ].copy()
+    bedroom_df_particals = bedroom_df[
+        ["c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000"]
+    ].copy()
 
     # Add room column
     kitchen_df_particals["Room"] = "Kitchen"
@@ -1298,17 +2195,14 @@ def particle_size_distribution(kitchen_df=None, hall_df=None, bedroom_df=None):
     bedroom_df_particals["Room"] = "Bedroom"
 
     # Combine all three dataframes
-    combined_df_particals = pd.concat([kitchen_df_particals, hall_df_particals, bedroom_df_particals])
+    combined_df_particals = pd.concat(
+        [kitchen_df_particals, hall_df_particals, bedroom_df_particals]
+    )
 
     # Compare mean counts across all room
     particle_summary = combined_df_particals.groupby("Room").mean()
     print("Mean Particle Counts Across Rooms:")
     print(particle_summary)
-
-
-# --- Code cell 45 ---
-# Call the function
-particle_size_distribution(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
 
 
 # --- Markdown cell 46 ---
@@ -1324,11 +2218,11 @@ def correlation_heatmap(kitchen_df=None, hall_df=None, bedroom_df=None):
     each image to the correlation plots directory.
     """
     if kitchen_df is None:
-        raise ValueError('kitchen_df is None')
+        raise ValueError("kitchen_df is None")
     if hall_df is None:
-        raise ValueError('hall_df is None')
+        raise ValueError("hall_df is None")
     if bedroom_df is None:
-        raise ValueError('bedroom_df is None')
+        raise ValueError("bedroom_df is None")
 
     # Create heatmap for kitchen (all variables).
     kitchen_corr = kitchen_df.corr()
@@ -1345,12 +2239,26 @@ def correlation_heatmap(kitchen_df=None, hall_df=None, bedroom_df=None):
     plt.show()
 
     # Create heatmap for kitchen for only PMs and particle counts.
-    kitchen_pms_counts_corr = kitchen_df[
-        [
-            "PM1", "PM2.5", "PM10", "pm1atm", "pm2.5atm", "pm10atm",
-            "c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000",
+    kitchen_pms_counts_corr = (
+        kitchen_df[
+            [
+                "PM1",
+                "PM2.5",
+                "PM10",
+                "pm1atm",
+                "pm2.5atm",
+                "pm10atm",
+                "c_300",
+                "c_500",
+                "c_1000",
+                "c_2500",
+                "c_5000",
+                "c_10000",
+            ]
         ]
-    ].copy().corr()
+        .copy()
+        .corr()
+    )
     plt.figure(figsize=(10, 8))
     sns.heatmap(kitchen_pms_counts_corr, annot=True, cmap="coolwarm", center=0)
     plt.title("Kitchen Pms and counts Correlation Heatmap")
@@ -1375,12 +2283,26 @@ def correlation_heatmap(kitchen_df=None, hall_df=None, bedroom_df=None):
     )
     plt.show()
     # Create heatmap for hall for only PMs and particle counts.
-    hall_pms_counts_corr = hall_df[
-        [
-            "PM1", "PM2.5", "PM10", "pm1atm", "pm2.5atm", "pm10atm",
-            "c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000",
+    hall_pms_counts_corr = (
+        hall_df[
+            [
+                "PM1",
+                "PM2.5",
+                "PM10",
+                "pm1atm",
+                "pm2.5atm",
+                "pm10atm",
+                "c_300",
+                "c_500",
+                "c_1000",
+                "c_2500",
+                "c_5000",
+                "c_10000",
+            ]
         ]
-    ].copy().corr()
+        .copy()
+        .corr()
+    )
     plt.figure(figsize=(10, 8))
     sns.heatmap(hall_pms_counts_corr, annot=True, cmap="coolwarm", center=0)
     plt.title("Hall Pms and counts Correlation Heatmap")
@@ -1406,12 +2328,26 @@ def correlation_heatmap(kitchen_df=None, hall_df=None, bedroom_df=None):
     plt.show()
 
     # Create heatmap for bedroom for only PMs and particle counts.
-    bedroom_pms_counts_corr = bedroom_df[
-        [
-            "PM1", "PM2.5", "PM10", "pm1atm", "pm2.5atm", "pm10atm",
-            "c_300", "c_500", "c_1000", "c_2500", "c_5000", "c_10000",
+    bedroom_pms_counts_corr = (
+        bedroom_df[
+            [
+                "PM1",
+                "PM2.5",
+                "PM10",
+                "pm1atm",
+                "pm2.5atm",
+                "pm10atm",
+                "c_300",
+                "c_500",
+                "c_1000",
+                "c_2500",
+                "c_5000",
+                "c_10000",
+            ]
         ]
-    ].copy().corr()
+        .copy()
+        .corr()
+    )
     plt.figure(figsize=(10, 8))
     sns.heatmap(bedroom_pms_counts_corr, annot=True, cmap="coolwarm", center=0)
     plt.title("Bedrrom Pms and counts Correlation Heatmap")
@@ -1424,6 +2360,256 @@ def correlation_heatmap(kitchen_df=None, hall_df=None, bedroom_df=None):
     plt.show()
 
 
-# --- Code cell 48 ---
-# Call the function
-correlation_heatmap(kitchen_df=kitchen_df, hall_df=hall_df, bedroom_df=bedroom_df)
+def frequency_analysis(kitchen_df=None, hall_df=None, bedroom_df=None):
+    if kitchen_df is None:
+        raise ValueError("kitchen_df is None")
+    if bedroom_df is None:
+        raise ValueError("bedroom_df is None")
+    if hall_df is None:
+        raise ValueError("hall_df is None")
+
+    # Round off pm2.5atm to nearest integer for frequency counts
+    bedroom_vals = bedroom_df["pm2.5atm"].round().dropna().astype(int)
+    hall_vals = hall_df["pm2.5atm"].round().dropna().astype(int)
+    kitchen_vals = kitchen_df["pm2.5atm"].round().dropna().astype(int)
+
+    # Count occurrences of each pm2.5atm value
+    bedroom_freq = bedroom_vals.value_counts().sort_index()
+    hall_freq = hall_vals.value_counts().sort_index()
+    kitchen_freq = kitchen_vals.value_counts().sort_index()
+
+    # Align all pm2.5atm bins across rooms for plotting
+    freq_index = bedroom_freq.index.union(hall_freq.index).union(kitchen_freq.index)
+    freq_index = (
+        pd.Index(pd.to_numeric(freq_index, errors="coerce")).dropna().sort_values()
+    )
+    freq_df = pd.DataFrame(
+        {
+            "pm2.5atm": freq_index,
+            "Bedroom": bedroom_freq.reindex(freq_index, fill_value=0).values,
+            "Hall": hall_freq.reindex(freq_index, fill_value=0).values,
+            "Kitchen": kitchen_freq.reindex(freq_index, fill_value=0).values,
+        }
+    )
+
+    # Plot the frequency distribution for each room with shaded area
+    x = freq_df["pm2.5atm"].to_numpy(dtype=float)
+    kitchen_y = freq_df["Kitchen"].to_numpy(dtype=float)
+    hall_y = freq_df["Hall"].to_numpy(dtype=float)
+    bedroom_y = freq_df["Bedroom"].to_numpy(dtype=float)
+
+    plt.figure(figsize=(15, 8))
+    plt.plot(x, kitchen_y, color=kitchen_colour, label="Kitchen", alpha=0.9)
+    plt.fill_between(x, kitchen_y, alpha=0.3, color=kitchen_colour)
+    plt.plot(x, hall_y, color=hall_colour, label="Hall", alpha=0.9)
+    plt.fill_between(x, hall_y, alpha=0.3, color=hall_colour)
+    plt.plot(x, bedroom_y, color=bedroom_colour, label="Bedroom", alpha=0.9)
+    plt.fill_between(x, bedroom_y, alpha=0.3, color=bedroom_colour)
+    plt.xlabel("PM2.5 (µg/m³)")
+    plt.ylabel("Frequency (Number of Occurrences)")
+
+    # Set axis limits and show x-axis ticks every 50 units
+    x_min, x_max = 0, int(max(freq_df["pm2.5atm"].max() * 1.1, 100))
+    plt.xlim(x_min, x_max)
+    plt.xticks(range(0, x_max + 1, 50))
+
+    # Set y-axis limits with a little padding
+    y_max = max(freq_df[["Kitchen", "Hall", "Bedroom"]].max()) * 1.1
+    plt.ylim(0, y_max)
+
+    plt.title("Frequency Distribution of PM2.5")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    # Save the plot
+    plt.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Frequency_Analysis"), exist_ok=True)
+    plt.savefig(
+        os.path.join(PLOT_DIR, "Frequency_Analysis", "Frequency_Distribution.png")
+    )
+    # Show the plot
+    plt.show()
+
+    # For each room, calculate the percentage of time pm2.5atm was in the following bins: 0-15, 15-60, >60
+    bins = [0, 15, 60, np.inf]
+    labels = ["0-15", "15-60", ">60"]
+    kitchen_bins = pd.cut(kitchen_vals, bins=bins, labels=labels, right=False)
+    hall_bins = pd.cut(hall_vals, bins=bins, labels=labels, right=False)
+    bedroom_bins = pd.cut(bedroom_vals, bins=bins, labels=labels, right=False)
+    kitchen_bin_counts = kitchen_bins.value_counts(normalize=True) * 100
+    hall_bin_counts = hall_bins.value_counts(normalize=True) * 100
+    bedroom_bin_counts = bedroom_bins.value_counts(normalize=True) * 100
+    print("Percentage of time PM2.5 was in the following bins:")
+    print("Kitchen:")
+    print(kitchen_bin_counts)
+    print("Hall:")
+    print(hall_bin_counts)
+    print("Bedroom:")
+    print(bedroom_bin_counts)
+
+
+# ============================================================================
+# 24-Hour Average Analysis (WHO & NAAQS Guidelines Comparison)
+# ============================================================================
+def daily_average_guideline_comparison(kitchen_df=None, hall_df=None, bedroom_df=None):
+    if kitchen_df is None:
+        raise ValueError("kitchen_df is None")
+    if hall_df is None:
+        raise ValueError("hall_df is None")
+    if bedroom_df is None:
+        raise ValueError("bedroom_df is None")
+
+    # Calculate 24-hour daily averages for each room
+    kitchen_daily_avg = kitchen_df.resample("D")["pm2.5atm"].mean()
+    hall_daily_avg = hall_df.resample("D")["pm2.5atm"].mean()
+    bedroom_daily_avg = bedroom_df.resample("D")["pm2.5atm"].mean()
+
+    # WHO 24hr Guideline: 15 µg/m³
+    # India 24hr NAAQS: 60 µg/m³
+    who_guideline = 15
+    naaqs_guideline = 60
+
+    # Calculate percentage of days exceeding each guideline
+    kitchen_who_pct = (kitchen_daily_avg > who_guideline).mean() * 100
+    kitchen_naaqs_pct = (kitchen_daily_avg > naaqs_guideline).mean() * 100
+
+    hall_who_pct = (hall_daily_avg > who_guideline).mean() * 100
+    hall_naaqs_pct = (hall_daily_avg > naaqs_guideline).mean() * 100
+
+    bedroom_who_pct = (bedroom_daily_avg > who_guideline).mean() * 100
+    bedroom_naaqs_pct = (bedroom_daily_avg > naaqs_guideline).mean() * 100
+
+    # Print results
+    print("\n" + "=" * 80)
+    print("24-Hour Average Daily Analysis - WHO & NAAQS Guidelines Comparison")
+    print("=" * 80)
+    print("\nDaily Average Statistics (µg/m³):")
+    print(f"\nKitchen:")
+    print(f"  Mean Daily Average: {kitchen_daily_avg.mean():.2f}")
+    print(f"  Min Daily Average: {kitchen_daily_avg.min():.2f}")
+    print(f"  Max Daily Average: {kitchen_daily_avg.max():.2f}")
+    print(f"  Std Dev: {kitchen_daily_avg.std():.2f}")
+    print(f"  % Days > WHO Guideline (15 µg/m³): {kitchen_who_pct:.2f}%")
+    print(f"  % Days > NAAQS Guideline (60 µg/m³): {kitchen_naaqs_pct:.2f}%")
+
+    print(f"\nHall:")
+    print(f"  Mean Daily Average: {hall_daily_avg.mean():.2f}")
+    print(f"  Min Daily Average: {hall_daily_avg.min():.2f}")
+    print(f"  Max Daily Average: {hall_daily_avg.max():.2f}")
+    print(f"  Std Dev: {hall_daily_avg.std():.2f}")
+    print(f"  % Days > WHO Guideline (15 µg/m³): {hall_who_pct:.2f}%")
+    print(f"  % Days > NAAQS Guideline (60 µg/m³): {hall_naaqs_pct:.2f}%")
+
+    print(f"\nBedroom:")
+    print(f"  Mean Daily Average: {bedroom_daily_avg.mean():.2f}")
+    print(f"  Min Daily Average: {bedroom_daily_avg.min():.2f}")
+    print(f"  Max Daily Average: {bedroom_daily_avg.max():.2f}")
+    print(f"  Std Dev: {bedroom_daily_avg.std():.2f}")
+    print(f"  % Days > WHO Guideline (15 µg/m³): {bedroom_who_pct:.2f}%")
+    print(f"  % Days > NAAQS Guideline (60 µg/m³): {bedroom_naaqs_pct:.2f}%")
+
+    # Create comparison plot
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    rooms = ["Kitchen", "Hall", "Bedroom"]
+    who_percentages = [kitchen_who_pct, hall_who_pct, bedroom_who_pct]
+    naaqs_percentages = [kitchen_naaqs_pct, hall_naaqs_pct, bedroom_naaqs_pct]
+    room_colors_list = [kitchen_colour, hall_colour, bedroom_colour]
+
+    x = np.arange(len(rooms))
+    width = 0.35
+
+    bars1 = ax.bar(
+        x - width / 2,
+        who_percentages,
+        width,
+        label="WHO Guideline (15 µg/m³)",
+        alpha=0.8,
+        color="#984EA3",
+    )
+    bars2 = ax.bar(
+        x + width / 2,
+        naaqs_percentages,
+        width,
+        label="NAAQS Guideline (60 µg/m³)",
+        alpha=0.8,
+        color="#A65628",
+    )
+
+    ax.set_xlabel("Room", fontsize=14, fontweight="bold")
+    ax.set_ylabel("% of Days Exceeding Guideline", fontsize=14, fontweight="bold")
+    ax.set_title(
+        "Daily Average PM2.5: % Days Exceeding WHO & NAAQS Guidelines",
+        fontsize=16,
+        fontweight="bold",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(rooms, fontsize=12)
+    ax.legend(fontsize=12)
+    ax.tick_params(axis="y", labelsize=12)
+    ax.grid(axis="y", alpha=0.3)
+
+    # Add value labels on bars
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                height,
+                f"{height:.1f}%",
+                ha="center",
+                va="bottom",
+                fontsize=11,
+                fontweight="bold",
+            )
+
+    fig.tight_layout()
+    os.makedirs(os.path.join(PLOT_DIR, "Daily_Average_Analysis"), exist_ok=True)
+    fig.savefig(
+        os.path.join(
+            PLOT_DIR, "Daily_Average_Analysis", "Daily_Average_Guideline_Comparison.png"
+        ),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.show()
+
+    # Create a summary dataframe and save to CSV
+    summary_df = pd.DataFrame(
+        {
+            "Room": rooms,
+            "Mean Daily Avg (µg/m³)": [
+                kitchen_daily_avg.mean(),
+                hall_daily_avg.mean(),
+                bedroom_daily_avg.mean(),
+            ],
+            "Min Daily Avg (µg/m³)": [
+                kitchen_daily_avg.min(),
+                hall_daily_avg.min(),
+                bedroom_daily_avg.min(),
+            ],
+            "Max Daily Avg (µg/m³)": [
+                kitchen_daily_avg.max(),
+                hall_daily_avg.max(),
+                bedroom_daily_avg.max(),
+            ],
+            "Std Dev (µg/m³)": [
+                kitchen_daily_avg.std(),
+                hall_daily_avg.std(),
+                bedroom_daily_avg.std(),
+            ],
+            "% Days > WHO (15 µg/m³)": who_percentages,
+            "% Days > NAAQS (60 µg/m³)": naaqs_percentages,
+        }
+    )
+
+    summary_df.to_csv(
+        os.path.join(
+            PLOT_DIR, "Daily_Average_Analysis", "Daily_Average_Guideline_Summary.csv"
+        ),
+        index=False,
+    )
+    print("\nSummary saved to: Daily_Average_Guideline_Summary.csv")
+
+
+if __name__ == "__main__":
+    main()
